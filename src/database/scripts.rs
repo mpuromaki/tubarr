@@ -67,7 +67,9 @@ pub fn upgrade_1_users_tables(conn: &PooledConnection<SqliteConnectionManager>) 
         "CREATE TABLE IF NOT EXISTS users (
             id BLOB PRIMARY KEY,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            protected BOOLEAN DEFAULT 0,
+            enabled BOOLEAN DEFAULT 1
         )",
         [],
     )
@@ -82,23 +84,32 @@ pub fn upgrade_1_users_tables(conn: &PooledConnection<SqliteConnectionManager>) 
             user_id BLOB NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            protected BOOLEAN DEFAULT 0,
+            enabled BOOLEAN DEFAULT 1,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )",
         [],
     )
     .context("Failed to create users_local table")?;
 
+    // Insert into users table with 'protected' and 'enabled' fields set to true for the admin
+
     // Insert the admin user
     let admin_id: [u8; 16] = [
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF,
     ];
     let admin_password_hash = "replace_with_proper_hashed_password";
 
-    conn.execute("INSERT INTO users (id) VALUES (?1)", params![admin_id])
-        .context("Failed to insert admin user into users table")?;
-
     conn.execute(
-        "INSERT INTO users_local (username, password_hash, user_id) VALUES (?1, ?2, ?3)",
+        "INSERT INTO users (id, protected, enabled) VALUES (?1, 1, 1)",
+        params![admin_id],
+    )
+    .context("Failed to insert admin user into users table")?;
+
+    // Insert into users_local table
+    conn.execute(
+        "INSERT INTO users_local (username, password_hash, user_id, protected, enabled) VALUES (?1, ?2, ?3, 1, 1)",
         params!["admin", admin_password_hash, admin_id],
     )
     .context("Failed to insert admin user into users_local table")?;
