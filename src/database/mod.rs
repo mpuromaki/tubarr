@@ -14,7 +14,7 @@ pub fn init_from(filepath: &str) -> Arc<r2d2::Pool<SqliteConnectionManager>> {
     let pool = Arc::new(sqlite_pool);
 
     // Upgrade the database
-    db_upgrade(pool.clone());
+    let _ = db_upgrade(pool.clone());
 
     return pool;
 }
