@@ -38,7 +38,7 @@ fn db_upgrade(pool: Arc<Pool<SqliteConnectionManager>>) -> Result<()> {
 fn db_get_version(conn: &PooledConnection<SqliteConnectionManager>) -> Result<u32> {
     // SQL query to fetch the latest version number by date
     let mut stmt = conn
-        .prepare("SELECT version_number FROM db_version ORDER BY date DESC LIMIT 1")
+        .prepare("SELECT version_number FROM db_version ORDER BY version_number DESC LIMIT 1")
         .context("Failed to prepare the SQL statement.")?;
 
     // Execute the query and fetch the version_number
