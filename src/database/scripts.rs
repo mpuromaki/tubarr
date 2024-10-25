@@ -23,25 +23,40 @@ pub fn upgrade_from(idx: usize, conn: &PooledConnection<SqliteConnectionManager>
 
     // Iterate over the upgrades starting from the specified index
     for (i, upgrade) in upgrades.iter().enumerate().skip(idx) {
-        println!("DB Upgrade {}/{}", i + 1, upgrades.len()); // Logging the upgrade number
+        print!("DB Upgrade {}/{}.. ", i + 1, upgrades.len()); // Logging the upgrade number
         upgrade(conn)?; // Apply the upgrade
     }
 
     Ok(())
 }
 
+fn insert_version(ver: usize, desc: &str, conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    // Insert the first version (e.g., version 1)
+    conn.execute(
+        "INSERT INTO db_version (version_number, description, date) VALUES (?1, ?2, datetime('now'))",
+        params![ver, desc],
+    )
+    .context("Failed to insert version into db_version table")?;
+
+    println!("Done");
+    Ok(())
+}
+
 /// Return a static list of upgrade functions
 pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) -> Result<()>> {
-    vec![upgrade_0_db_versions, upgrade_1_users_tables]
+    vec![
+        upgrade_1_db_versions,
+        upgrade_2_users_tables,
+        upgrade_3_app_configuration,
+    ]
 }
 
 /// Upgrade: Create db_version table and insert initial version
-pub fn upgrade_0_db_versions(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+pub fn upgrade_1_db_versions(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
     // Create the db_version table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS db_version (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            version_number INTEGER NOT NULL,
+            version_number INTEGER PRIMARY KEY NOT NULL,
             description TEXT,
             date TEXT NOT NULL
         )",
@@ -49,19 +64,14 @@ pub fn upgrade_0_db_versions(conn: &PooledConnection<SqliteConnectionManager>) -
     )
     .context("Failed to create db_version table")?;
 
-    // Insert the first version (e.g., version 1)
-    conn.execute(
-        "INSERT INTO db_version (version_number, description, date) VALUES (?1, ?2, datetime('now'))",
-        params![1, "Initial database version"],
-    )
-    .context("Failed to insert the initial version into db_version table")?;
-
+    // Set DB version
+    insert_version(1, "Initial database version", conn)?;
     Ok(())
 }
 
 /// Upgrade: Create users and users_local tables
 /// User IDs are 16-byte BLOBs of UUID-v4
-pub fn upgrade_1_users_tables(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+pub fn upgrade_2_users_tables(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
     // Create users table
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
@@ -114,5 +124,30 @@ pub fn upgrade_1_users_tables(conn: &PooledConnection<SqliteConnectionManager>) 
     )
     .context("Failed to insert admin user into users_local table")?;
 
+    // Set DB version
+    insert_version(2, "Create user handling", conn)?;
+    Ok(())
+}
+
+/// Upgrade: Create app_configuration table to store key-value pairs
+pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    // Create app_configuration table
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS app_configuration (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )",
+        [],
+    )
+    .context("Failed to create app_configuration table")?;
+
+    // Insert initial configuration
+    let insert_kv = "INSERT INTO app_configuration (key, value) VALUES (?1, ?2)";
+    conn.execute(insert_kv, params!["first_time_setup", "true"])?;
+    conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr/"])?;
+    conn.execute(insert_kv, params!["path_media", "/media/tubarr/"])?;
+
+    // Set DB version
+    insert_version(3, "Create app configuration", conn)?;
     Ok(())
 }
