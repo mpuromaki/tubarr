@@ -1,29 +1,42 @@
 //! TUBARR - ARR app for Youtube
+//! Supports only Linux operating systems.
 //!
 //! Server software with web-UI for monitoring youtube subscriptions and downloading
 //! videos.
-//! Requires local installation of yt-dlp.
+//! Requires local installation of yt-dlp and ffmpeg.
 
-use std::{
-    io, sync::{mpsc::channel, Arc}, thread
-};
+use core::time;
 use std::io::Write;
+use std::{
+    io,
+    sync::{atomic::AtomicBool, mpsc::channel, Arc},
+    thread::{self, JoinHandle},
+};
 
+use anyhow::{Context, Result};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-use anyhow::{Context, Result};
 
 static DB_PATH: &'static str = "./db.sqlite";
 
+pub mod common;
 mod database;
 mod taskrunner;
 
 pub type DBPool = Arc<Pool<SqliteConnectionManager>>;
 
+static FLAG_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
 fn main() {
     // Initialize the database
     let dbp = database::init_from(DB_PATH);
+
+    // Set up CTRL+C handling, for clean shutdown
+    ctrlc::set_handler(move || {
+        FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     // First_time_setup
     if is_first_time_setup(dbp.clone()) {
@@ -35,16 +48,34 @@ fn main() {
 
     // Start subprograms
     let mut subprogs = Vec::new();
+    subprogs.push(thread::spawn(move || taskrunner::run(dbp.clone())));
 
-    subprogs.push(thread::spawn(|| taskrunner::start()));
+    // Main infinite loop
+    loop {
+        // Sleep so we don't trash the CPU
+        thread::sleep(time::Duration::from_secs(1));
+
+        // Check for shutdown signal
+        if FLAG_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) == true {
+            break;
+        }
+    }
+
+    // Clean shutdown
+    println!("Shutting down...");
+    FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
+    for thd in subprogs {
+        let _ = thd.join();
+    }
+    exit_with_ok();
 }
 
-/// Exit the program with no errors. Sends shutdown to subprograms.
+/// Exit the program with no errors.
 fn exit_with_ok() {
     std::process::exit(0);
 }
 
-/// Exit the program with error code. Sends shutdown to subprograms.
+/// Exit the program with error code.
 fn exit_with_error(errcode: i32) {
     std::process::exit(errcode);
 }
@@ -69,10 +100,13 @@ fn is_first_time_setup(dbp: DBPool) -> bool {
 
 /// Ask configuration from user, store the settings to database.
 fn get_configuration_from_user(dbp: DBPool) -> Result<()> {
-    let conn = dbp.get().expect("Failed to get database connection from pool");
+    let conn = dbp
+        .get()
+        .expect("Failed to get database connection from pool");
 
     // Retrieve all configuration rows except for "first_time_setup"
-    let mut stmt = conn.prepare("SELECT key, value FROM app_configuration WHERE key != 'first_time_setup'")?;
+    let mut stmt =
+        conn.prepare("SELECT key, value FROM app_configuration WHERE key != 'first_time_setup'")?;
     let config_entries = stmt.query_map([], |row| {
         let key: String = row.get(0)?;
         let value: String = row.get(1)?;
@@ -93,7 +127,9 @@ fn get_configuration_from_user(dbp: DBPool) -> Result<()> {
 
         // Read user input
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read input");
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read input");
 
         // Use the default value if the input is empty; otherwise, use the user's input
         let value = if input.trim().is_empty() {

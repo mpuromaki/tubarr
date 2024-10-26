@@ -30,7 +30,11 @@ pub fn upgrade_from(idx: usize, conn: &PooledConnection<SqliteConnectionManager>
     Ok(())
 }
 
-fn insert_version(ver: usize, desc: &str, conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+fn insert_version(
+    ver: usize,
+    desc: &str,
+    conn: &PooledConnection<SqliteConnectionManager>,
+) -> Result<()> {
     // Insert the first version (e.g., version 1)
     conn.execute(
         "INSERT INTO db_version (version_number, description, date) VALUES (?1, ?2, datetime('now'))",
@@ -48,6 +52,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_1_db_versions,
         upgrade_2_users_tables,
         upgrade_3_app_configuration,
+        upgrade_4_tasks,
     ]
 }
 
@@ -144,10 +149,35 @@ pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManag
     // Insert initial configuration
     let insert_kv = "INSERT INTO app_configuration (key, value) VALUES (?1, ?2)";
     conn.execute(insert_kv, params!["first_time_setup", "true"])?;
-    conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr/"])?;
-    conn.execute(insert_kv, params!["path_media", "/media/tubarr/"])?;
+    conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr"])?;
+    conn.execute(insert_kv, params!["path_media", "/media/tubarr"])?;
+    conn.execute(insert_kv, params!["sub_lang", "en,fi"])?;
 
     // Set DB version
     insert_version(3, "Create app configuration", conn)?;
+    Ok(())
+}
+
+/// Upgrade: Create tasks table for tracking download tasks
+/// This is for one-and-done tasks. New tasks are always created with task_state="NEW".
+/// Workers lock the table when looking for tasks. They'll update single row they take at a time.
+/// When ever task_state is updated, updated_at must be updated as well.
+/// Separate background tasks will clean old tasks and restart stuck tasks based on task_state and updated_at.
+pub fn upgrade_4_tasks(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_type TEXT NOT NULL,  /* DOWNLOAD */
+            task_data TEXT NOT NULL,  /* content varied by task_type */
+            task_state TEXT NOT NULL, /* NEW, WIP, ERROR, DONE */
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )",
+        [],
+    )
+    .context("Failed to create app_configuration table")?;
+
+    // Set DB version
+    insert_version(4, "Create tasks", conn)?;
     Ok(())
 }
