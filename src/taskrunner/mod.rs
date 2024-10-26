@@ -52,8 +52,11 @@ pub fn run(dbp: DBPool) {
         // Check for tasks
         if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
             for task in new_tasks {
+                println!("Found new task: {:?}", task);
                 match task.task_type.as_str() {
                     "DOWNLOAD" => {
+                        println!("Processing as download task.");
+                        mark_task_wip(dbp.clone(), task.task_id);
                         let thrd_conf = conf.clone();
                         let thrd_tx = result_tx.clone();
                         thread::spawn(move || {
@@ -68,6 +71,11 @@ pub fn run(dbp: DBPool) {
         // Check for worker reports, update tasks state
         while let Ok(result) = result_rx.try_recv() {
             // Update the result to the DB
+            println!("TASK RESULT: {:?}", result);
+            match result {
+                TaskResult::Ok(id) => mark_task_done(dbp.clone(), id),
+                TaskResult::Err(id, errcode) => mark_task_error(dbp.clone(), id),
+            }
         }
 
         // Check for shutdown signal
@@ -79,6 +87,7 @@ pub fn run(dbp: DBPool) {
     // Shutdown, bye!
 }
 
+#[derive(Debug)]
 struct TaskRaw {
     task_id: isize,
     task_type: String,
@@ -135,10 +144,62 @@ fn get_new_tasks(dbp: DBPool) -> Result<Vec<TaskRaw>> {
     Ok(tasks)
 }
 
+fn mark_task_wip(dbp: DBPool, task_id: isize) {
+    if let Ok(conn) = dbp.get() {
+        // Prepare the SQL statement to update the task
+        if let Err(e) = conn.execute(
+            "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            params!["WIP", task_id],
+        ) {
+            eprintln!("Error updating task state: {}", e); // Log the error
+            return;
+        }
+
+        println!("Task with ID {} marked as WIP.", task_id);
+    } else {
+        eprintln!("Error getting database connection."); // Log connection error
+    }
+}
+
+fn mark_task_done(dbp: DBPool, task_id: isize) {
+    if let Ok(conn) = dbp.get() {
+        // Prepare the SQL statement to update the task
+        if let Err(e) = conn.execute(
+            "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            params!["DONE", task_id],
+        ) {
+            eprintln!("Error updating task state: {}", e); // Log the error
+            return;
+        }
+
+        println!("Task with ID {} marked as DONE.", task_id);
+    } else {
+        eprintln!("Error getting database connection."); // Log connection error
+    }
+}
+
+fn mark_task_error(dbp: DBPool, task_id: isize) {
+    if let Ok(conn) = dbp.get() {
+        // Prepare the SQL statement to update the task
+        if let Err(e) = conn.execute(
+            "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
+            params!["ERROR", task_id],
+        ) {
+            eprintln!("Error updating task state: {}", e); // Log the error
+            return;
+        }
+
+        println!("Task with ID {} marked as ERROR.", task_id);
+    } else {
+        eprintln!("Error getting database connection."); // Log connection error
+    }
+}
+
 /// Result of task. Payload is the ID of the task.
+#[derive(Debug)]
 enum TaskResult {
-    Ok(isize),
-    Err(isize),
+    Ok(isize),         // ID
+    Err(isize, isize), // ID, ERRCODE
 }
 
 /// Worker for DOWNLOAD tasks.
@@ -148,11 +209,13 @@ fn worker_download(
     conf: Arc<HashMap<String, String>>,
     sender: Sender<TaskResult>,
 ) {
+    println!("Worker started for task ID {}", task_id);
+
     // Unpack data
     let data: TaskDownloadData = match serde_json::from_str(&data) {
         Ok(data) => data,
         Err(_) => {
-            let _ = sender.send(TaskResult::Err(-500));
+            let _ = sender.send(TaskResult::Err(task_id, -500));
             return;
         }
     };
@@ -166,6 +229,8 @@ fn worker_download(
     let sub_lang = conf
         .get("sub_lang")
         .expect("Could not get configuration: sub_lang");
+
+    println!("Task created successfully!");
 
     // Download the video with yt-dlp
     let filename_template = "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s";
@@ -185,7 +250,7 @@ fn worker_download(
         .status();
 
     if output.is_err() {
-        let _ = sender.send(TaskResult::Err(-501));
+        let _ = sender.send(TaskResult::Err(task_id, -501));
         return;
     }
 
