@@ -13,18 +13,19 @@
 
 use anyhow::Result;
 use chrono::TimeZone;
-use core::time;
+use core::{str, time};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::ffi::IntoStringError;
-use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use std::{collections::HashMap, fs::create_dir_all};
+use std::{ffi::IntoStringError, path::Path};
+use std::{fs, path::PathBuf};
+use tldextract::{TldExtractor, TldOption};
 
 use crate::common::TaskDownloadData;
 
@@ -220,6 +221,17 @@ fn worker_download(
         }
     };
 
+    let tldopt = TldOption::default();
+    let extractor = TldExtractor::new(tldopt);
+    let extracted = extractor
+        .extract(&data.url)
+        .expect("Could not extract domain");
+    let domain = format!(
+        "{}.{}",
+        extracted.domain.unwrap(),
+        extracted.suffix.unwrap()
+    );
+
     let path_tmp = conf
         .get("path_temp")
         .expect("Could not get configuration: path_temp");
@@ -231,10 +243,49 @@ fn worker_download(
         .expect("Could not get configuration: sub_lang");
 
     println!("Task created successfully!");
+    println!("PATH TMP: {:?}", path_tmp);
+    println!("PATH_MEDIA: {:?}", path_media);
 
-    // Download the video with yt-dlp
+    // Resolve file name with yt-dlp
+    let filename_template = "%(channel)s SPLITATTHISPOINT %(upload_date)s SPLITATTHISPOINT %(title)s SPLITATTHISPOINT (%(id)s)";
+
+    let filename_output = Command::new("yt-dlp")
+        .args(["--print", "filename", "-o", &filename_template, &data.url])
+        .output();
+
+    if filename_output.is_err() {
+        let _ = sender.send(TaskResult::Err(task_id, -502));
+        return;
+    }
+    let filename_output = filename_output.unwrap();
+    let filename_parts = match str::from_utf8(&filename_output.stdout) {
+        Ok(name) => name.trim().to_string(),
+        Err(_) => {
+            let _ = sender.send(TaskResult::Err(task_id, -503));
+            return;
+        }
+    };
+    let filename = filename_parts.replace("SPLITATTHISPOINT", "-");
+    let channel = filename_parts
+        .split("SPLITATTHISPOINT")
+        .nth(0)
+        .expect("no channel name")
+        .trim();
+    let year = filename_parts
+        .split("SPLITATTHISPOINT")
+        .nth(1)
+        .expect("no year")
+        .trim()[..4]
+        .to_owned();
+
+    println!("FILENAME: {:?}", filename);
+    println!("CHANNEL: {:?}", channel);
+    println!("YEAR: {:?}", year);
+
+    // Download the files with yt-dlp
     let filename_template = "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s";
     let filepath = format!("{}/{}", path_tmp, filename_template);
+
     let output = Command::new("yt-dlp")
         .args([
             "--write-description",
@@ -247,15 +298,67 @@ fn worker_download(
             &filepath,
             &data.url,
         ])
-        .status();
+        .output();
 
     if output.is_err() {
-        let _ = sender.send(TaskResult::Err(task_id, -501));
+        let _ = sender.send(TaskResult::Err(task_id, -504));
         return;
     }
+    let output = output.unwrap();
 
-    // Move the files to destination
+    // 10s delay to let things stablize
+    thread::sleep(time::Duration::from_secs(10));
+
+    // Set up the media storage location
+    let mut path_media_full: PathBuf = path_media.into();
+    path_media_full.push(domain);
+    path_media_full.push(channel);
+    path_media_full.push(year);
+    let _ = create_dir_all(&path_media_full);
+
+    println!("PATH_MEDIA_FULL: {:?}", path_media_full);
+
+    // Move the files
+    let path_tmp = PathBuf::from(path_tmp);
+    let _ = move_files_with_prefix(&path_tmp, &path_media_full, &filename);
 
     // And finally, return
     let _ = sender.send(TaskResult::Ok(task_id));
+}
+
+fn move_files_with_prefix(
+    path_tmp: &Path,
+    path_media_full: &Path,
+    filename_prefix: &str,
+) -> Result<()> {
+    // Iterate over entries in the `path_tmp` directory
+    for entry in fs::read_dir(path_tmp)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Check if it's a file and if its name starts with the `filename_prefix`
+        if path.is_file() {
+            if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+                if file_name.starts_with(filename_prefix) {
+                    // Define the destination path in `path_media_full`
+                    let destination = path_media_full.join(file_name);
+
+                    // Move the file
+                    fs::copy(&path, &destination)?;
+
+                    // Verify that `path` is within `path_tmp` before removing
+                    let canonical_path = path.canonicalize()?;
+                    if canonical_path.starts_with(&path_tmp) {
+                        fs::remove_file(&canonical_path)?;
+                    } else {
+                        eprintln!(
+                            "Warning: Skipped deletion for file outside `path_tmp`: {:?}",
+                            path
+                        );
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }

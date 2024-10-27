@@ -150,7 +150,7 @@ pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManag
     let insert_kv = "INSERT INTO app_configuration (key, value) VALUES (?1, ?2)";
     conn.execute(insert_kv, params!["first_time_setup", "true"])?;
     conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr"])?;
-    conn.execute(insert_kv, params!["path_media", "/srv/media/youtube"])?;
+    conn.execute(insert_kv, params!["path_media", "/srv/media"])?;
     conn.execute(insert_kv, params!["sub_lang", "en,fi"])?;
 
     // Set DB version
