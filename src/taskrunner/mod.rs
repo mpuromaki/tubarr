@@ -265,33 +265,64 @@ fn worker_download(
             return;
         }
     };
-    let filename = filename_parts.replace("SPLITATTHISPOINT", "-");
-    let channel = filename_parts
-        .split("SPLITATTHISPOINT")
-        .nth(0)
-        .expect("no channel name")
-        .trim();
-    let year = filename_parts
-        .split("SPLITATTHISPOINT")
-        .nth(1)
-        .expect("no year")
-        .trim()[..4]
-        .to_owned();
+    println!("FILENAME_PARTS: {}", filename_parts);
+
+    let mut filename = filename_parts.replace("SPLITATTHISPOINT", "-");
+    let mut channel = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(0)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if channel == Some("NA".to_string()) {
+        channel = None;
+    } else {
+        channel = channel;
+    }
+
+    let mut year = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(1)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if year == Some("NA".to_string()) {
+        year = None;
+    } else {
+        year = Some(year.unwrap().trim()[..4].to_string());
+    }
+
+    filename = filename.replace("NA -", "").trim().to_owned();
 
     println!("FILENAME: {:?}", filename);
     println!("CHANNEL: {:?}", channel);
     println!("YEAR: {:?}", year);
 
     // Download the files with yt-dlp
-    let filename_template = "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s";
+    let filename_template = match (&channel, &year) {
+        (Some(_), Some(_)) => "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s",
+        (Some(_), None) => "%(channel)s - %(title)s - (%(id)s).%(ext)s",
+        (None, Some(_)) => "%(upload_date)s - %(title)s - (%(id)s).%(ext)s",
+        (None, None) => "%(title)s - (%(id)s).%(ext)s",
+    };
     let filepath = format!("{}/{}", path_tmp, filename_template);
 
+    // Refer: https://github.com/yt-dlp/yt-dlp/issues/630#issuecomment-893659460
     let output = Command::new("yt-dlp")
         .args([
-            "--write-description",
-            "--write-thumbnail",
             "--no-playlist",
-            "--write-sub",
+            "--add-metadata",
+            "--embed-metadata",
+            "--embed-thumbnail",
+            "--write-subs",
+            "--write-auto-subs",
+            "--embed-subs",
+            "--compat-options",
+            "no-keep-subs",
             "--sub-lang",
             sub_lang,
             "-o",
@@ -312,8 +343,14 @@ fn worker_download(
     // Set up the media storage location
     let mut path_media_full: PathBuf = path_media.into();
     path_media_full.push(domain);
-    path_media_full.push(channel);
-    path_media_full.push(year);
+    if channel.is_some() {
+        path_media_full.push(channel.unwrap());
+    }
+    if year.is_some() {
+        path_media_full.push(year.unwrap());
+    } else {
+        path_media_full.push("other");
+    }
     let _ = create_dir_all(&path_media_full);
 
     println!("PATH_MEDIA_FULL: {:?}", path_media_full);

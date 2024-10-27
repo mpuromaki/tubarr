@@ -151,7 +151,7 @@ pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManag
     conn.execute(insert_kv, params!["first_time_setup", "true"])?;
     conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr"])?;
     conn.execute(insert_kv, params!["path_media", "/srv/media"])?;
-    conn.execute(insert_kv, params!["sub_lang", "en,fi"])?;
+    conn.execute(insert_kv, params!["sub_lang", "en.*,fi"])?;
 
     // Set DB version
     insert_version(3, "Create app configuration", conn)?;
