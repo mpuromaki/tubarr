@@ -18,6 +18,10 @@ use tokio::time::{self, sleep, Duration};
 use super::DBPool;
 use super::FLAG_SHUTDOWN;
 
+mod api;
+mod pages;
+mod statics;
+
 pub fn run(dbp: DBPool) {
     let rt = tokio::runtime::Runtime::new().expect("failed to create runtime");
 
@@ -39,8 +43,9 @@ pub async fn rocket(dbp: DBPool) -> Result<Rocket<Ignite>> {
     // Launch Rocket and attach the shutdown monitor
     let rocket = rocket::build()
         .manage(dbp)
-        .mount("/", FileServer::from(relative!("static")))
-        .mount("/", routes![create_task])
+        .mount("/static", routes![statics::style_css])
+        .mount("/api", routes![api::post_task])
+        .mount("/", routes![pages::get_home])
         .ignite()
         .await?;
 
@@ -61,26 +66,4 @@ async fn monitor_shutdown(shutdown_handle: Shutdown) {
             break;
         }
     }
-}
-
-#[derive(FromForm, Deserialize, Serialize)]
-struct DownloadForm {
-    url: String,
-}
-
-#[post("/", data = "<data>")]
-async fn create_task(data: Form<DownloadForm>, db_pool: &rocket::State<DBPool>) -> Redirect {
-    let conn = db_pool.get().expect("Failed to get DB connection");
-
-    conn.execute(
-        "INSERT INTO tasks (task_type, task_data, task_state) VALUES (?1, ?2, ?3)",
-        [
-            "DL-VIDEO",
-            &serde_json::to_string(&data.into_inner()).unwrap(),
-            "WAIT",
-        ],
-    )
-    .expect("Could not write to db.");
-
-    Redirect::to("/")
 }
