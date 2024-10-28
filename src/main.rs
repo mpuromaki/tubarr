@@ -23,6 +23,7 @@ static DB_PATH: &'static str = "./db.sqlite";
 pub mod common;
 mod database;
 mod taskrunner;
+mod webui;
 
 pub type DBPool = Arc<Pool<SqliteConnectionManager>>;
 
@@ -60,7 +61,12 @@ fn main() {
 
     // Start subprograms
     let mut subprogs = Vec::new();
-    subprogs.push(thread::spawn(move || taskrunner::run(dbp.clone())));
+
+    let dbp_clone = dbp.clone();
+    subprogs.push(thread::spawn(move || taskrunner::run(dbp_clone)));
+
+    let dbp_clone = dbp.clone();
+    subprogs.push(thread::spawn(move || webui::run(dbp_clone)));
 
     // Main infinite loop
     loop {
