@@ -53,7 +53,7 @@ fn main() {
     if args.contains(&"--test-data".to_string()) {
         create_task(
             dbp.clone(),
-            "DOWNLOAD",
+            "DL-VIDEO",
             "{\"url\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"}",
             "NEW",
         );

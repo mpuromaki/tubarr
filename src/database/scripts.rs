@@ -152,6 +152,7 @@ pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManag
     conn.execute(insert_kv, params!["path_temp", "/tmp/tubarr"])?;
     conn.execute(insert_kv, params!["path_media", "/srv/media"])?;
     conn.execute(insert_kv, params!["sub_lang", "en.*,fi"])?;
+    conn.execute(insert_kv, params!["retry_limit", "3"])?;
 
     // Set DB version
     insert_version(3, "Create app configuration", conn)?;
@@ -159,17 +160,19 @@ pub fn upgrade_3_app_configuration(conn: &PooledConnection<SqliteConnectionManag
 }
 
 /// Upgrade: Create tasks table for tracking download tasks
-/// This is for one-and-done tasks. New tasks are always created with task_state="NEW".
+/// This is for one-and-done tasks. New tasks are always created with task_state="WAIT".
 /// Workers lock the table when looking for tasks. They'll update single row they take at a time.
 /// When ever task_state is updated, updated_at must be updated as well.
 /// Separate background tasks will clean old tasks and restart stuck tasks based on task_state and updated_at.
+/// Exceeding retry-limit will cause the task to be set "FAIL".
 pub fn upgrade_4_tasks(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             task_type TEXT NOT NULL,  /* DOWNLOAD */
             task_data TEXT NOT NULL,  /* content varied by task_type */
-            task_state TEXT NOT NULL, /* NEW, WIP, ERROR, DONE */
+            task_state TEXT NOT NULL, /* WAIT, WIP, ERR, DONE, FAIL */
+            retry_count INTEGER DEFAULT 0,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )",

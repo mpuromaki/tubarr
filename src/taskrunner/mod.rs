@@ -5,11 +5,8 @@
 //! - Downloading the file with yt-dlp. ("DOWNLOAD" task)
 //! - Moving the file to the correct location after download is complete. ("DOWNLOAD" task)
 //!
-//! Yt-dlp options:
-//! yt-dlp --write-description --write-thumbnail --no-playlist --write-sub --sub-lang en,fi -o "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s"  <URL>
-//!
 //! Output folder structure:
-//! <PATH_MEDIA>/<CHANNEL>/Season <YYYY>/<FILENAME>
+//! <PATH_MEDIA>/<CHANNEL>/<YYYY>/<FILENAME>
 
 use anyhow::Result;
 use chrono::TimeZone;
@@ -55,7 +52,7 @@ pub fn run(dbp: DBPool) {
             for task in new_tasks {
                 println!("Found new task: {:?}", task);
                 match task.task_type.as_str() {
-                    "DOWNLOAD" => {
+                    "DL-VIDEO" => {
                         println!("Processing as download task.");
                         mark_task_wip(dbp.clone(), task.task_id);
                         let thrd_conf = conf.clone();
@@ -131,7 +128,7 @@ fn get_new_tasks(dbp: DBPool) -> Result<Vec<TaskRaw>> {
 
     // Query for all "NEW" tasks and map each row to a TaskRaw instance
     let tasks = stmt
-        .query_map(params!["NEW"], |row| {
+        .query_map(params!["WAIT"], |row| {
             Ok(TaskRaw {
                 task_id: row.get(0)?,
                 task_type: row.get(1)?,
@@ -184,7 +181,7 @@ fn mark_task_error(dbp: DBPool, task_id: isize) {
         // Prepare the SQL statement to update the task
         if let Err(e) = conn.execute(
             "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
-            params!["ERROR", task_id],
+            params!["ERR", task_id],
         ) {
             eprintln!("Error updating task state: {}", e); // Log the error
             return;
@@ -317,12 +314,13 @@ fn worker_download(
             "--no-playlist",
             "--add-metadata",
             "--embed-metadata",
-            "--embed-thumbnail",
+            "--write-thumbnail",
+            "--convert-thumbnails",
+            "jpg",
             "--write-subs",
             "--write-auto-subs",
-            "--embed-subs",
-            "--compat-options",
-            "no-keep-subs",
+            "--convert-subs",
+            "srt",
             "--sub-lang",
             sub_lang,
             "-o",

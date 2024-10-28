@@ -75,9 +75,9 @@ async fn create_task(data: Form<DownloadForm>, db_pool: &rocket::State<DBPool>) 
     conn.execute(
         "INSERT INTO tasks (task_type, task_data, task_state) VALUES (?1, ?2, ?3)",
         [
-            "DOWNLOAD",
+            "DL-VIDEO",
             &serde_json::to_string(&data.into_inner()).unwrap(),
-            "NEW",
+            "WAIT",
         ],
     )
     .expect("Could not write to db.");
