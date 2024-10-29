@@ -12,108 +12,123 @@ pub async fn style_css() -> (ContentType, &'static str) {
 }
 
 const CSS_STYLE: &'static str = r#"
-/* Basic.css  */
+/* style.css - Dark Theme with Bluish Accent */
 
-* {box-sizing: border-box}
-
-:root{
---sans: 1em/1.6 system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen, Ubuntu, Cantarell, Droid Sans, Helvetica Neue, Fira Sans, sans-serif;
---mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, Courier, 'Courier New', monospace;
---c1:#0074d9;
---c2:#eee;
---c3:#fff;
---c4:#000;
---c5:#fff;
---m1: 8px;
---rc: 8px;
-}
-
-@media (prefers-color-scheme: dark) {
-	:root {
-    --c2:#333;
-    --c3:#1e1f20;
-    --c4:#fff;
-	}
-}
-
-html {
-    -ms-text-size-adjust: 100%;
-    -webkit-text-size-adjust: 100%;
-
-}
-
-/* General settings */
-
-body {
+* {
     margin: 0;
-    font: var(--sans);
-    font-weight: 400;
-    font-style: normal;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-    background-color: var(--c3);
-    color: var(--c4);
+    padding: 0;
+    box-sizing: border-box;
 }
-img, iframe {border: none; max-width: 100%}
 
-a {color: var(--c1);  text-decoration:none}
+body, html {
+    height: 100%;
+    font-family: Arial, sans-serif;
+    background-color: #1a1a1a; /* Dark background for the entire page */
+    color: #e0e0e0; /* Light text color */
+}
 
-a:hover {color: var(--c1); text-decoration: underline}
+.container {
+    display: grid;
+    grid-template-areas:
+        "top-bar top-bar"
+        "side-bar content";
+    grid-template-columns: 200px 1fr;
+    grid-template-rows: 60px 1fr;
+    height: 100vh;
+}
 
-pre {font: 1em/1.6 var(--mono); background: var(--c2); padding: 1em; overflow: auto}
+/* Header - Top Bar */
+.top-bar {
+    grid-area: top-bar;
+    background-color: #222; /* Darker background for top bar */
+    color: #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    border-bottom: 1px solid #333; /* Border to separate top bar */
+}
 
-code {font: 1em/1.6 var(--mono);}
+.logo {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #b0c7ff; /* Bluish accent color for logo */
+}
 
-blockquote {border-left: 5px solid var(--c2); padding: 1em 1.5em; margin: 0}
+.user-button {
+    cursor: pointer;
+    padding: 10px;
+    background-color: #2a2f3b; /* Slightly darker background for button */
+    color: #b0c7ff; /* Bluish accent for text */
+    border: none;
+    border-radius: 4px;
+    text-align: center;
+    transition: background-color 0.3s;
+}
 
-hr {border:0; border-bottom: 1px solid var(--c4)}
+.user-button:hover {
+    background-color: #3a4b66; /* Bluish hover effect for user button */
+}
 
- /* Headlines */
+/* Sidebar Navigation */
+.side-bar {
+    grid-area: side-bar;
+    background-color: #1c1e26; /* Dark sidebar background */
+    color: #e0e0e0;
+    padding: 20px;
+    border-right: 1px solid #333;
+}
 
-h1,h2,h3,h4,h5,h6 {margin: 0.6em 0; font-weight: normal}
+.side-bar nav ul {
+    list-style: none;
+}
 
-h1 {font-size: 2.625em; line-height: 1.2}
+.side-bar nav ul li {
+    margin-bottom: 15px;
+}
 
-h2 {font-size: 1.625em; line-height: 1.2}
+.side-bar nav ul li a {
+    color: #b0c7ff; /* Bluish accent color for links */
+    text-decoration: none;
+    font-size: 1.1em;
+    transition: color 0.3s;
+}
 
-h3 {font-size: 1.3125em; line-height: 1.24}
+.side-bar nav ul li a:hover {
+    color: #8aa7ff; /* Slightly lighter blue on hover */
+    text-decoration: underline;
+}
 
-h4 {font-size: 1.1875em; line-height: 1.23}
+/* Main Content Area */
+.content {
+    grid-area: content;
+    padding: 20px;
+    background-color: #1f2029; /* Dark background for main content */
+    overflow-y: auto;
+    color: #e0e0e0;
+}
 
-h5,h6 {font-size: 1em; font-weight:bold}
-
-/* Table */
-
-table {border-collapse: collapse; border-spacing: 0; margin:1em 0}
-
-th, td {text-align: left; vertical-align: top; border: 1px solid; padding: 0.4em}
-
-thead,tfoot {background: var(--c2)}
-
-/* Rounded Corners*/
-
-pre,code,input,select,textarea,button,img {border-radius: var(--rc)}
+.content ul {
+    padding-left: 20px;
+}
 
 
-/* Forms */
+/* Scrollbar Styling (optional, for dark theme consistency) */
+.content::-webkit-scrollbar {
+    width: 8px;
+}
 
-input, select, textarea {font-size: 1em; color:var(--c4); background: var(--c2); border: 0; padding: 0.6em}
+.content::-webkit-scrollbar-thumb {
+    background-color: #3a4b66; /* Bluish scrollbar thumb */
+    border-radius: 4px;
+}
 
-button, input[type=submit], input[type=reset], input[type="button"] { -webkit-appearance: none; font-size: 1em; display: inline-block; color: var(--c5); background: var(--c1);  border: 0; margin: 4px;  padding: 0.6em; cursor: pointer; text-align: center}
+.content::-webkit-scrollbar-track {
+    background-color: #2a2a2a; /* Dark scrollbar track */
+}
 
-button:hover, button:focus, input:hover, textarea:hover, select:hover {opacity: 0.8}
-
-/* Infinite Grid */
-
-section {display: flex; flex-flow: row wrap}
-
-[style*="--c:"], section>section, aside, article {flex:var(--c,1); margin:var(--m1)}
-
-/* Cards */
-
-article {background: var(--c2); border-radius: var(--rc); padding: 1em; box-shadow: 0px 1px 0px rgba(0,0,0,0.3)}
-
-[style*="--c:"]:first-child, section>section:first-child, article:first-child {margin-left:0}
-[style*="--c:"]:last-child, section>section:last-child, article:last-child {margin-right:0}
-
+.section {
+    padding-top: 20px;
+    padding-bottom: 50px;
+}
 "#;
