@@ -50,15 +50,6 @@ fn main() {
     // Argument handling
     let args: Vec<String> = env::args().collect();
 
-    if args.contains(&"--test-data".to_string()) {
-        create_task(
-            dbp.clone(),
-            "DL-VIDEO",
-            "{\"url\":\"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"}",
-            "NEW",
-        );
-    }
-
     // Start subprograms
     let mut subprogs = Vec::new();
 
@@ -184,21 +175,4 @@ fn set_first_time_setup(dbp: DBPool) {
     } else {
         return;
     }
-}
-
-fn create_task(dbp: DBPool, task_type: &str, task_data: &str, task_state: &str) {
-    if let Ok(conn) = dbp.get() {
-        if let Err(e) = conn.execute(
-            "INSERT INTO tasks (task_type, task_data, task_state) VALUES (?1, ?2, ?3)",
-            params![task_type, task_data, task_state],
-        ) {
-            eprintln!("Error inserting task: {}", e); // Log the error
-            return;
-        }
-    } else {
-        eprintln!("Error getting database connection."); // Log connection error
-        return;
-    }
-
-    println!("Test task created successfully!");
 }
