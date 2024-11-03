@@ -20,7 +20,6 @@ use rusqlite::params;
 
 static DB_PATH: &'static str = "./db.sqlite";
 
-pub mod common;
 mod database;
 mod taskrunner;
 mod webui;
