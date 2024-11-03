@@ -9,20 +9,16 @@
 //! <PATH_MEDIA>/<CHANNEL>/<YYYY>/<FILENAME>
 
 use anyhow::Result;
-use chrono::TimeZone;
 use core::{str, time};
 use rusqlite::params;
-use serde::{Deserialize, Serialize};
-use std::process::Command;
+use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
-use std::thread::JoinHandle;
-use std::{collections::HashMap, fs::create_dir_all};
-use std::{ffi::IntoStringError, path::Path};
-use std::{fs, path::PathBuf};
-use tldextract::{TldExtractor, TldOption};
+use tracing::{debug, error, event, info, trace, warn};
 
 use super::DBPool;
 use super::FLAG_SHUTDOWN;
@@ -30,14 +26,11 @@ use super::FLAG_SHUTDOWN;
 mod task_download;
 
 pub fn run(dbp: DBPool) {
-    let conn = dbp
-        .get()
-        .expect("Failed to get database connection from pool");
     let (result_tx, result_rx): (Sender<TaskResult>, Receiver<TaskResult>) = channel();
     let conf = match get_configuration(dbp.clone()) {
         Ok(conf) => Arc::from(conf),
         Err(_) => {
-            eprintln!("taskrunner could not load configuration.");
+            error!("Could not load configuration");
             FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
             return;
         }
@@ -50,10 +43,10 @@ pub fn run(dbp: DBPool) {
         // Check for tasks
         if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
             for task in new_tasks {
-                println!("Found new task: {:?}", task);
+                debug!("New task: {:?}", task);
                 match task.task_type.as_str() {
                     "DL-VIDEO" => {
-                        println!("Processing as download task.");
+                        debug!("Processing as video download task");
                         mark_task_wip(dbp.clone(), task.task_id);
                         let thrd_conf = conf.clone();
                         let thrd_tx = result_tx.clone();
@@ -69,7 +62,7 @@ pub fn run(dbp: DBPool) {
         // Check for worker reports, update tasks state
         while let Ok(result) = result_rx.try_recv() {
             // Update the result to the DB
-            println!("TASK RESULT: {:?}", result);
+            debug!("TASK RESULT: {:?}", result);
             match result {
                 TaskResult::Ok(id) => mark_task_done(dbp.clone(), id),
                 TaskResult::Err(id, errcode) => mark_task_error(dbp.clone(), id),
@@ -78,11 +71,13 @@ pub fn run(dbp: DBPool) {
 
         // Check for shutdown signal
         if FLAG_SHUTDOWN.load(std::sync::atomic::Ordering::Relaxed) == true {
+            info!("Shutdown requested");
             break;
         }
     }
 
     // Shutdown, bye!
+    // Do we need to join tasks, they can run for long time?
 }
 
 #[derive(Debug)]
@@ -149,13 +144,13 @@ fn mark_task_wip(dbp: DBPool, task_id: isize) {
             "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
             params!["WIP", task_id],
         ) {
-            eprintln!("Error updating task state: {}", e); // Log the error
+            error!("Error updating task state: {}", e); // Log the error
             return;
         }
 
-        println!("Task with ID {} marked as WIP.", task_id);
+        debug!("Task with ID {} marked as WIP.", task_id);
     } else {
-        eprintln!("Error getting database connection."); // Log connection error
+        error!("Error getting database connection."); // Log connection error
     }
 }
 
@@ -166,13 +161,13 @@ fn mark_task_done(dbp: DBPool, task_id: isize) {
             "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
             params!["DONE", task_id],
         ) {
-            eprintln!("Error updating task state: {}", e); // Log the error
+            error!("Error updating task state: {}", e); // Log the error
             return;
         }
 
-        println!("Task with ID {} marked as DONE.", task_id);
+        debug!("Task with ID {} marked as DONE.", task_id);
     } else {
-        eprintln!("Error getting database connection."); // Log connection error
+        error!("Error getting database connection."); // Log connection error
     }
 }
 
@@ -183,13 +178,13 @@ fn mark_task_error(dbp: DBPool, task_id: isize) {
             "UPDATE tasks SET task_state = ?1, updated_at = CURRENT_TIMESTAMP WHERE id = ?2",
             params!["ERR", task_id],
         ) {
-            eprintln!("Error updating task state: {}", e); // Log the error
+            error!("Error updating task state: {}", e); // Log the error
             return;
         }
 
-        println!("Task with ID {} marked as ERROR.", task_id);
+        debug!("Task with ID {} marked as ERROR.", task_id);
     } else {
-        eprintln!("Error getting database connection."); // Log connection error
+        error!("Error getting database connection."); // Log connection error
     }
 }
 
@@ -225,7 +220,7 @@ fn move_files_with_prefix(
                     if canonical_path.starts_with(&path_tmp) {
                         fs::remove_file(&canonical_path)?;
                     } else {
-                        eprintln!(
+                        info!(
                             "Warning: Skipped deletion for file outside `path_tmp`: {:?}",
                             path
                         );

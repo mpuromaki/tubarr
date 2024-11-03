@@ -1643,6 +1643,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tldextract",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

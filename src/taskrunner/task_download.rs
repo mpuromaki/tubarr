@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::{collections::HashMap, process::Command};
 use std::{fs::create_dir_all, thread, time};
-use std::{path::PathBuf, sync::mpsc::channel};
 use tldextract::{TldExtractor, TldOption};
+use tracing::{debug, error, event, info, trace, warn};
 
 use super::{move_files_with_prefix, TaskResult};
 
@@ -15,7 +16,7 @@ pub fn worker(
     conf: Arc<HashMap<String, String>>,
     sender: Sender<TaskResult>,
 ) {
-    println!("task_download::worker started for task {}", task_id);
+    debug!("task_download::worker started for task {}", task_id);
 
     // Unpack data
     let data: TaskDownloadData = match serde_json::from_str(&data) {
@@ -57,7 +58,7 @@ pub fn worker(
             return;
         }
     };
-    println!("FILENAME_PARTS: {}", filename_parts);
+    debug!("FILENAME_PARTS: {}", filename_parts);
 
     let mut filename = filename_parts.replace("SPLITATTHISPOINT", "-");
     let mut channel = Some(
@@ -90,9 +91,9 @@ pub fn worker(
 
     filename = filename.replace("NA -", "").trim().to_owned();
 
-    println!("FILENAME: {:?}", filename);
-    println!("CHANNEL: {:?}", channel);
-    println!("YEAR: {:?}", year);
+    debug!("FILENAME: {:?}", filename);
+    debug!("CHANNEL: {:?}", channel);
+    debug!("YEAR: {:?}", year);
 
     // Download the files with yt-dlp
     let filename_template = match (&channel, &year) {
@@ -146,7 +147,7 @@ pub fn worker(
     }
     let _ = create_dir_all(&path_media_full);
 
-    println!("PATH_MEDIA_FULL: {:?}", path_media_full);
+    debug!("PATH_MEDIA_FULL: {:?}", path_media_full);
 
     // Move the files
     let path_tmp = PathBuf::from(path_tmp);

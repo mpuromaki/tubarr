@@ -5,20 +5,18 @@
 //! videos.
 //! Requires local installation of yt-dlp and ffmpeg.
 
+use anyhow::Result;
 use core::time;
-use std::io::Write;
-use std::{
-    env, io,
-    sync::{atomic::AtomicBool, mpsc::channel, Arc},
-    thread::{self, JoinHandle},
-};
-
-use anyhow::{Context, Result};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-
-static DB_PATH: &'static str = "./db.sqlite";
+use std::io::Write;
+use std::{
+    env, io,
+    sync::{atomic::AtomicBool, Arc},
+    thread,
+};
+use tracing::{debug, error, event, info, trace, warn};
 
 mod database;
 mod taskrunner;
@@ -26,14 +24,24 @@ mod webui;
 
 pub type DBPool = Arc<Pool<SqliteConnectionManager>>;
 
+static DB_PATH: &'static str = "./db.sqlite";
 static FLAG_SHUTDOWN: AtomicBool = AtomicBool::new(false);
 
 fn main() {
+    // Initialize tracing (logging)
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .with_level(true)
+        .with_ansi(true)
+        .compact()
+        .init();
+
     // Initialize the database
     let dbp = database::init_from(DB_PATH);
 
     // Set up CTRL+C handling, for clean shutdown
     ctrlc::set_handler(move || {
+        info!("Received Ctrl+C");
         FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
     })
     .expect("Error setting Ctrl-C handler");
@@ -70,7 +78,7 @@ fn main() {
     }
 
     // Clean shutdown
-    println!("Shutting down...");
+    info!("Shutdown requested");
     FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
     for thd in subprogs {
         let _ = thd.join();

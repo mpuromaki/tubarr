@@ -2,6 +2,7 @@ use anyhow::{Context, Ok, Result};
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
+use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
 /// Apply upgrades from specific index
 pub fn upgrade_from(idx: usize, conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
@@ -17,14 +18,22 @@ pub fn upgrade_from(idx: usize, conn: &PooledConnection<SqliteConnectionManager>
     }
 
     if idx == upgrades.len() {
-        println!("DB is up to date.");
+        info!("DB is up to date.");
         return Ok(());
     }
 
     // Iterate over the upgrades starting from the specified index
     for (i, upgrade) in upgrades.iter().enumerate().skip(idx) {
-        print!("DB Upgrade {}/{}.. ", i + 1, upgrades.len()); // Logging the upgrade number
+        let span = span!(
+            Level::INFO,
+            "DB upgrade",
+            iteration = i + 1,
+            total = upgrades.len()
+        );
+        let _enter = span.enter();
+        info!("DB Upgrade {}/{} starting...", i + 1, upgrades.len());
         upgrade(conn)?; // Apply the upgrade
+        info!("DB Upgrade {}/{} completed.", i + 1, upgrades.len());
     }
 
     Ok(())
@@ -41,8 +50,6 @@ fn insert_version(
         params![ver, desc],
     )
     .context("Failed to insert version into db_version table")?;
-
-    println!("Done");
     Ok(())
 }
 

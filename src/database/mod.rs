@@ -4,6 +4,7 @@ use anyhow::{anyhow, Context, Ok, Result};
 use r2d2::{self, Pool, PooledConnection};
 use r2d2_sqlite::{self, SqliteConnectionManager};
 use rusqlite::{params, OptionalExtension};
+use tracing::{debug, error, event, info, trace, warn};
 
 mod scripts;
 
