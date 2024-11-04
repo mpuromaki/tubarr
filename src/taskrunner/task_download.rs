@@ -7,7 +7,7 @@ use std::{fs::create_dir_all, thread, time};
 use tldextract::{TldExtractor, TldOption};
 use tracing::{debug, error, event, info, trace, warn};
 
-use super::{move_files_with_prefix, TaskResult};
+use super::{move_files_with_prefix, parse_domain, TaskResult};
 
 /// Worker for DOWNLOAD tasks.
 pub fn worker(
@@ -16,7 +16,7 @@ pub fn worker(
     conf: Arc<HashMap<String, String>>,
     sender: Sender<TaskResult>,
 ) {
-    debug!("task_download::worker started for task {}", task_id);
+    debug!("task_download::worker() started for task {}", task_id);
 
     // Unpack data
     let data: TaskDownloadData = match serde_json::from_str(&data) {
@@ -27,7 +27,7 @@ pub fn worker(
         }
     };
 
-    let domain = parse_domain(&data);
+    let domain = parse_domain(&data.url);
 
     let path_tmp = conf
         .get("path_temp")
@@ -155,20 +155,6 @@ pub fn worker(
 
     // And finally, return
     let _ = sender.send(TaskResult::Ok(task_id));
-}
-
-fn parse_domain(data: &TaskDownloadData) -> String {
-    let tldopt = TldOption::default();
-    let extractor = TldExtractor::new(tldopt);
-    let extracted = extractor
-        .extract(&data.url)
-        .expect("Could not extract domain");
-    let domain = format!(
-        "{}.{}",
-        extracted.domain.unwrap(),
-        extracted.suffix.unwrap()
-    );
-    domain
 }
 
 #[derive(Debug, Deserialize, Serialize)]

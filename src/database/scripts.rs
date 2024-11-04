@@ -60,6 +60,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_2_users_tables,
         upgrade_3_app_configuration,
         upgrade_4_tasks,
+        upgrade_5_channels,
     ]
 }
 
@@ -185,9 +186,32 @@ pub fn upgrade_4_tasks(conn: &PooledConnection<SqliteConnectionManager>) -> Resu
         )",
         [],
     )
-    .context("Failed to create app_configuration table")?;
+    .context("Failed to create tasks table")?;
 
     // Set DB version
     insert_version(4, "Create tasks", conn)?;
+    Ok(())
+}
+
+/// Upgrade: Create channels table for tracking known channels
+/// This should support other sites than youtube as well.
+pub fn upgrade_5_channels(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS channels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            domain TEXT,
+            url TEXT UNIQUE NOT NULL,
+            channel_id TEXT NOT NULL,
+            channel_name TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(domain, channel_id),
+            UNIQUE(domain, channel_name)
+        )",
+        [],
+    )
+    .context("Failed to create channels table")?;
+
+    // Set DB version
+    insert_version(5, "Create channels", conn)?;
     Ok(())
 }

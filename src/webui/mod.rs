@@ -44,7 +44,15 @@ pub async fn rocket(dbp: DBPool) -> Result<Rocket<Ignite>> {
     let rocket = rocket::build()
         .manage(dbp)
         .mount("/static", routes![statics::style_css])
-        .mount("/api", routes![api::post_task, api::get_tasks])
+        .mount(
+            "/api",
+            routes![
+                api::post_task,
+                api::get_tasks,
+                api::post_channel,
+                api::get_channels
+            ],
+        )
         .mount("/", routes![pages::get_home, pages::get_channels])
         .ignite()
         .await?;

@@ -18,11 +18,13 @@ use std::sync::mpsc::channel;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
+use tldextract::{TldExtractor, TldOption};
 use tracing::{debug, error, event, info, trace, warn};
 
 use super::DBPool;
 use super::FLAG_SHUTDOWN;
 
+mod task_channel;
 mod task_download;
 
 pub fn run(dbp: DBPool) {
@@ -43,10 +45,9 @@ pub fn run(dbp: DBPool) {
         // Check for tasks
         if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
             for task in new_tasks {
-                debug!("New task: {:?}", task);
                 match task.task_type.as_str() {
                     "DL-VIDEO" => {
-                        debug!("Processing as video download task");
+                        debug!("DL-VIDEO: {:?}", task);
                         mark_task_wip(dbp.clone(), task.task_id);
                         let thrd_conf = conf.clone();
                         let thrd_tx = result_tx.clone();
@@ -54,7 +55,26 @@ pub fn run(dbp: DBPool) {
                             task_download::worker(task.task_id, task.task_data, thrd_conf, thrd_tx)
                         });
                     }
-                    _ => continue,
+                    "CHANNEL-ADD" => {
+                        debug!("CHANNEL-ADD: {:?}", task);
+                        mark_task_wip(dbp.clone(), task.task_id);
+                        let thrd_conf = conf.clone();
+                        let thrd_tx = result_tx.clone();
+                        let thrd_dbp = dbp.clone();
+                        thread::spawn(move || {
+                            task_channel::add(
+                                task.task_id,
+                                task.task_data,
+                                thrd_conf,
+                                thrd_tx,
+                                thrd_dbp,
+                            )
+                        });
+                    }
+                    _ => {
+                        error!("Unknown task type: {:?}", task);
+                        mark_task_error(dbp.clone(), task.task_id);
+                    }
                 }
             }
         }
@@ -230,4 +250,16 @@ fn move_files_with_prefix(
         }
     }
     Ok(())
+}
+
+fn parse_domain(url: &str) -> String {
+    let tldopt = TldOption::default();
+    let extractor = TldExtractor::new(tldopt);
+    let extracted = extractor.extract(url).expect("Could not extract domain");
+    let domain = format!(
+        "{}.{}",
+        extracted.domain.unwrap(),
+        extracted.suffix.unwrap()
+    );
+    domain
 }
