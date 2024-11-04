@@ -36,6 +36,12 @@ pub fn add(
     // Get domain
     let domain = parse_domain(&data.url);
 
+    if &domain != "youtube.com" {
+        error!("Adding channels is not supported for domain: {}", domain);
+        let _ = sender.send(TaskResult::Err(task_id, -400));
+        return;
+    }
+
     // Get channel ID
     let output = Command::new("yt-dlp")
         .args([
