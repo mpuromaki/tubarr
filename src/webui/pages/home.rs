@@ -55,7 +55,7 @@ async function fetchTasks() {
 }
 
 // Poll the API every 5 seconds
-setInterval(fetchTasks, 5000);
+// setInterval(fetchTasks, 5000);
 fetchTasks(); // Initial fetch
 </script>
 "#;

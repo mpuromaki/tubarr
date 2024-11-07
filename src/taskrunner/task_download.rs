@@ -41,9 +41,19 @@ pub fn worker(
 
     // Resolve file name with yt-dlp
     let filename_template = "%(channel)s SPLITATTHISPOINT %(upload_date)s SPLITATTHISPOINT %(title)s SPLITATTHISPOINT (%(id)s)";
+    let url_no_list_query = match &data.url.split_once("&list") {
+        Some(url) => url.0,
+        None => &data.url.clone(),
+    };
 
     let filename_output = Command::new("yt-dlp")
-        .args(["--print", "filename", "-o", &filename_template, &data.url])
+        .args([
+            "--print",
+            "filename",
+            "-o",
+            &filename_template,
+            url_no_list_query,
+        ])
         .output();
 
     if filename_output.is_err() {
