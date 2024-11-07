@@ -66,7 +66,7 @@ async function fetchChannels() {
 }
 
 // Poll the API every 5 seconds
-setInterval(fetchChannels, 5000);
+// setInterval(fetchChannels, 5000);
 fetchChannels(); // Initial fetch to load channels right away
 </script>
 "#;
