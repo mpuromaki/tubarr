@@ -51,8 +51,15 @@ pub fn run(dbp: DBPool) {
                         mark_task_wip(dbp.clone(), task.task_id);
                         let thrd_conf = conf.clone();
                         let thrd_tx = result_tx.clone();
+                        let thrd_dbp = dbp.clone();
                         thread::spawn(move || {
-                            task_download::worker(task.task_id, task.task_data, thrd_conf, thrd_tx)
+                            task_download::worker(
+                                task.task_id,
+                                task.task_data,
+                                thrd_conf,
+                                thrd_tx,
+                                thrd_dbp,
+                            )
                         });
                     }
                     "CHANNEL-ADD" => {

@@ -61,6 +61,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_3_app_configuration,
         upgrade_4_tasks,
         upgrade_5_channels,
+        upgrade_6_videos,
     ]
 }
 
@@ -194,12 +195,12 @@ pub fn upgrade_4_tasks(conn: &PooledConnection<SqliteConnectionManager>) -> Resu
 }
 
 /// Upgrade: Create channels table for tracking known channels
-/// This should support other sites than youtube as well.
+/// Only youtube is supported at this point.
 pub fn upgrade_5_channels(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS channels (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain TEXT,
+            domain TEXT NOT NULL,
             url TEXT UNIQUE NOT NULL,
             channel_id TEXT NOT NULL,
             channel_name TEXT NOT NULL,
@@ -213,5 +214,34 @@ pub fn upgrade_5_channels(conn: &PooledConnection<SqliteConnectionManager>) -> R
 
     // Set DB version
     insert_version(5, "Create channels", conn)?;
+    Ok(())
+}
+
+/// Upgrade: Create videos table for tracking known videos
+/// When fetching all videos for a channel, yt-dlp can only give
+/// estimated release_dates. Then separate background process should
+/// get more precise dates for those. Aggregation into seasons will be
+/// by release_date, or estimate if that's null. Season is just release year.
+pub fn upgrade_6_videos(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS videos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id INTEGER,
+            domain TEXT NOT NULL,
+            url TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            video_id TEXT NOT NULL,
+            release_date DATETIME,
+            release_date_estimate DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (channel_id) REFERENCES channels(id),
+            UNIQUE(domain, video_id)
+        )",
+        [],
+    )
+    .context("Failed to create channels table")?;
+
+    // Set DB version
+    insert_version(6, "Create videos", conn)?;
     Ok(())
 }

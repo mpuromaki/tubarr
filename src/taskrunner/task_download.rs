@@ -1,3 +1,5 @@
+use chrono::{NaiveDate, NaiveDateTime};
+use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
@@ -5,7 +7,9 @@ use std::sync::Arc;
 use std::{collections::HashMap, process::Command};
 use std::{fs::create_dir_all, thread, time};
 use tldextract::{TldExtractor, TldOption};
-use tracing::{debug, error, event, info, trace, warn};
+use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
+
+use crate::DBPool;
 
 use super::{move_files_with_prefix, parse_domain, TaskResult};
 
@@ -15,6 +19,7 @@ pub fn worker(
     data: String,
     conf: Arc<HashMap<String, String>>,
     sender: Sender<TaskResult>,
+    dbp: DBPool,
 ) {
     debug!("task_download::worker() started for task {}", task_id);
 
@@ -40,7 +45,7 @@ pub fn worker(
         .expect("Could not get configuration: sub_lang");
 
     // Resolve file name with yt-dlp
-    let filename_template = "%(channel)s SPLITATTHISPOINT %(upload_date)s SPLITATTHISPOINT %(title)s SPLITATTHISPOINT (%(id)s)";
+    let filename_template = "%(channel_id)s SPLITATTHISPOINT %(channel)s SPLITATTHISPOINT %(upload_date)s SPLITATTHISPOINT %(title)s SPLITATTHISPOINT %(id)s";
     let url_no_list_query = match &data.url.split_once("&list") {
         Some(url) => url.0,
         None => &data.url.clone(),
@@ -70,8 +75,7 @@ pub fn worker(
     };
     debug!("FILENAME_PARTS: {}", filename_parts);
 
-    let mut filename = filename_parts.replace("SPLITATTHISPOINT", "-");
-    let mut channel = Some(
+    let mut channel_id = Some(
         filename_parts
             .split("SPLITATTHISPOINT")
             .nth(0)
@@ -79,16 +83,44 @@ pub fn worker(
             .trim()
             .to_owned(),
     );
-    if channel == Some("NA".to_string()) {
-        channel = None;
+    if channel_id == Some("NA".to_string()) {
+        channel_id = None;
     } else {
-        channel = channel;
+        channel_id = channel_id;
+    }
+
+    let mut channel_name = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(1)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if channel_name == Some("NA".to_string()) {
+        channel_name = None;
+    } else {
+        channel_name = channel_name;
+    }
+
+    let mut upload_date = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(2)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if upload_date == Some("NA".to_string()) {
+        upload_date = None;
+    } else {
+        upload_date = upload_date;
     }
 
     let mut year = Some(
         filename_parts
             .split("SPLITATTHISPOINT")
-            .nth(1)
+            .nth(2)
             .unwrap()
             .trim()
             .to_owned(),
@@ -99,18 +131,59 @@ pub fn worker(
         year = Some(year.unwrap().trim()[..4].to_string());
     }
 
-    filename = filename.replace("NA -", "").trim().to_owned();
+    let mut title = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(3)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if title == Some("NA".to_string()) {
+        title = None;
+    } else {
+        title = title;
+    }
+
+    let mut video_id = Some(
+        filename_parts
+            .split("SPLITATTHISPOINT")
+            .nth(4)
+            .unwrap()
+            .trim()
+            .to_owned(),
+    );
+    if video_id == Some("NA".to_string()) {
+        video_id = None;
+    } else {
+        video_id = video_id;
+    }
+
+    let mut filename = "".to_string();
+    if let Some(txt) = &channel_name {
+        filename.push_str(txt);
+        filename.push_str(" - ");
+    }
+    if let Some(txt) = &upload_date {
+        filename.push_str(txt);
+        filename.push_str(" - ");
+    }
+    if let Some(txt) = &title {
+        filename.push_str(txt);
+        filename.push_str(" - ");
+    }
+    if let Some(txt) = &video_id {
+        filename.push_str(txt);
+    }
 
     debug!("FILENAME: {:?}", filename);
-    debug!("CHANNEL: {:?}", channel);
-    debug!("YEAR: {:?}", year);
 
     // Download the files with yt-dlp
-    let filename_template = match (&channel, &year) {
-        (Some(_), Some(_)) => "%(channel)s - %(upload_date)s - %(title)s - (%(id)s).%(ext)s",
-        (Some(_), None) => "%(channel)s - %(title)s - (%(id)s).%(ext)s",
-        (None, Some(_)) => "%(upload_date)s - %(title)s - (%(id)s).%(ext)s",
-        (None, None) => "%(title)s - (%(id)s).%(ext)s",
+    let filename_template = match (&channel_name, &year) {
+        (Some(_), Some(_)) => "%(channel)s - %(upload_date)s - %(title)s - %(id)s.%(ext)s",
+        (Some(_), None) => "%(channel)s - %(title)s - %(id)s.%(ext)s",
+        (None, Some(_)) => "%(upload_date)s - %(title)s - %(id)s.%(ext)s",
+        (None, None) => "%(title)s - %(id)s.%(ext)s",
     };
     let filepath = format!("{}/{}", path_tmp, filename_template);
 
@@ -146,9 +219,9 @@ pub fn worker(
 
     // Set up the media storage location
     let mut path_media_full: PathBuf = path_media.into();
-    path_media_full.push(domain);
-    if channel.is_some() {
-        path_media_full.push(channel.unwrap());
+    path_media_full.push(&domain);
+    if channel_name.is_some() {
+        path_media_full.push(channel_name.unwrap());
     }
     if year.is_some() {
         path_media_full.push(year.unwrap());
@@ -162,6 +235,43 @@ pub fn worker(
     // Move the files
     let path_tmp = PathBuf::from(path_tmp);
     let _ = move_files_with_prefix(&path_tmp, &path_media_full, &filename);
+
+    // Record this as known video
+    let span = span!(Level::DEBUG, "Insert video");
+    let _enter = span.enter();
+    if let Ok(conn) = dbp.get() {
+        let channel_id: Option<i64> = conn
+            .query_row(
+                "SELECT id FROM channels WHERE domain = ?1 AND channel_id = ?2",
+                params![domain, channel_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        debug!("Channel ID: {:?}", channel_id);
+
+        let mut naive_datetime_upload: Option<NaiveDateTime> = None;
+        if upload_date.is_some() {
+            let naive_date_upload = NaiveDate::parse_from_str(&upload_date.unwrap(), "%Y%m%d")
+                .expect("Could not parse datetime");
+            naive_datetime_upload = Some(naive_date_upload.and_hms(0, 0, 0));
+        }
+
+        conn.execute(
+        "INSERT OR REPLACE INTO videos (channel_id, domain, url, name, video_id, release_date, release_date_estimate)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            channel_id,
+            domain,
+            &data.url,
+            title,
+            video_id,
+            naive_datetime_upload,
+            naive_datetime_upload
+        ]).unwrap();
+    }
+    drop(_enter);
 
     // And finally, return
     let _ = sender.send(TaskResult::Ok(task_id));
