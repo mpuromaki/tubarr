@@ -231,6 +231,8 @@ pub fn upgrade_6_videos(conn: &PooledConnection<SqliteConnectionManager>) -> Res
             url TEXT UNIQUE NOT NULL,
             name TEXT NOT NULL,
             video_id TEXT NOT NULL,
+            is_requested INTEGER NOT NULL, 
+            is_downloaded INTEGER NOT NULL,
             release_date DATETIME,
             release_date_estimate DATETIME,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
