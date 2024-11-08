@@ -41,7 +41,7 @@ fn main() {
 
     // Set up CTRL+C handling, for clean shutdown
     ctrlc::set_handler(move || {
-        info!("Received Ctrl+C");
+        warn!("Received Ctrl+C");
         FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
     })
     .expect("Error setting Ctrl-C handler");
@@ -78,7 +78,7 @@ fn main() {
     }
 
     // Clean shutdown
-    info!("Shutdown requested");
+    warn!("Shutdown requested");
     FLAG_SHUTDOWN.store(true, std::sync::atomic::Ordering::Relaxed);
     for thd in subprogs {
         let _ = thd.join();
