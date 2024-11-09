@@ -62,6 +62,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_4_tasks,
         upgrade_5_channels,
         upgrade_6_videos,
+        upgrade_7_channels_normalized_name,
     ]
 }
 
@@ -245,5 +246,45 @@ pub fn upgrade_6_videos(conn: &PooledConnection<SqliteConnectionManager>) -> Res
 
     // Set DB version
     insert_version(6, "Create videos", conn)?;
+    Ok(())
+}
+
+/// Upgrade: Add channel_name_normalized column to channels table for case-insensitive matching
+pub fn upgrade_7_channels_normalized_name(
+    conn: &PooledConnection<SqliteConnectionManager>,
+) -> Result<()> {
+    // Add channel_name_normalized column
+    conn.execute(
+        "ALTER TABLE channels ADD COLUMN channel_name_normalized TEXT;",
+        [],
+    )
+    .context("Failed to add channel_name_normalized column")?;
+
+    // Populate the channel_name_normalized column with lowercase values of channel_name
+    conn.execute(
+        "UPDATE channels SET channel_name_normalized = LOWER(channel_name);",
+        [],
+    )
+    .context("Failed to populate channel_name_normalized")?;
+
+    // Add a trigger to keep channel_name_normalized in sync with channel_name on updates
+    conn.execute(
+        "CREATE TRIGGER IF NOT EXISTS update_channel_name_normalized
+         AFTER UPDATE OF channel_name ON channels
+         FOR EACH ROW
+         BEGIN
+             UPDATE channels SET channel_name_normalized = LOWER(NEW.channel_name)
+             WHERE id = NEW.id;
+         END;",
+        [],
+    )
+    .context("Failed to create update trigger for channel_name_normalized")?;
+
+    // Set DB version
+    insert_version(
+        7,
+        "Add normalized channel name for case-insensitive matching",
+        conn,
+    )?;
     Ok(())
 }

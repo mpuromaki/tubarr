@@ -20,7 +20,7 @@ const TMPL_1: &'static str = r###"
 <head>
     <meta charset="UTF-8">
     <title>Tubarr</title>
-    <link rel="stylesheet" href="static/style.css" type="text/css">
+    <link rel="stylesheet" href="/static/style.css" type="text/css">
 "###;
 
 const TMPL_2: &'static str = r###"

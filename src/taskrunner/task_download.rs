@@ -260,7 +260,7 @@ pub fn worker(
 
         conn.execute(
         "INSERT OR REPLACE INTO videos (channel_id, domain, url, name, video_id, release_date, release_date_estimate, is_requested, is_downloaded)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             channel_id,
             domain,

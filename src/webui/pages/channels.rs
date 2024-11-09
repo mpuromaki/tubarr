@@ -1,13 +1,14 @@
 //! channels page
 
 use crate::DBPool;
-use rocket::get;
 use rocket::http::ContentType;
+use rocket::{get, State};
+use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
 use super::render_page;
 
 #[get("/channels")]
-pub async fn get_channels(db_pool: &rocket::State<DBPool>) -> (ContentType, String) {
+pub async fn get_channels(db_pool: &State<DBPool>) -> (ContentType, String) {
     // let conn = db_pool.get().expect("Failed to get DB connection");
 
     let page = render_page("", HTML_CHANNELS);
@@ -68,5 +69,90 @@ async function fetchChannels() {
 // Poll the API every 5 seconds
 // setInterval(fetchChannels, 5000);
 fetchChannels(); // Initial fetch to load channels right away
+</script>
+"#;
+
+#[get("/channels/<domain>/<channel>")]
+pub async fn get_channel_videos(
+    domain: String,
+    channel: String,
+    _db_pool: &State<DBPool>,
+) -> (ContentType, String) {
+    let span = span!(Level::DEBUG, "get_channel_videos");
+    let _enter = span.enter();
+
+    debug!("Domain: {}", domain);
+    debug!("Channel: {}", channel);
+
+    // Render page with dynamic placeholders for JavaScript
+    let page_content = HTML_CHANNEL_VIDEOS
+        .replace("{{DOMAIN}}", &domain)
+        .replace("{{CHANNEL}}", &channel);
+
+    (ContentType::HTML, render_page("", &page_content))
+}
+
+// HTML template for channel videos page
+const HTML_CHANNEL_VIDEOS: &str = r#"
+<div class="section">
+    <h1>Channel Videos - {{CHANNEL}}</h1>
+    <div id="seasons-container">
+        <!-- Videos grouped by season will be populated here by JavaScript -->
+    </div>
+</div>
+
+<script>
+async function fetchVideos() {
+    const domain = "{{DOMAIN}}";
+    const channel = "{{CHANNEL}}";
+    const response = await fetch(`/api/videos/${domain}/${channel}`);
+    if (!response.ok) {
+        console.error("Failed to fetch videos");
+        return;
+    }
+
+    const videos = await response.json();
+    const seasonsContainer = document.getElementById("seasons-container");
+    seasonsContainer.innerHTML = ""; // Clear any existing content
+
+    // Group videos by season
+    const videosBySeason = {};
+    videos.forEach(video => {
+        const season = video.season || "unknown"; // Fallback to "unknown" if season is not defined
+        if (!videosBySeason[season]) {
+            videosBySeason[season] = [];
+        }
+        videosBySeason[season].push(video);
+    });
+
+    // Create HTML for each season and its videos
+    for (const [season, videos] of Object.entries(videosBySeason)) {
+        const seasonDiv = document.createElement("div");
+        seasonDiv.classList.add("season");
+        seasonDiv.innerHTML = `<h2>Season: ${season}</h2>`;
+
+        const videoList = document.createElement("div");
+        videoList.classList.add("videos-list");
+
+        videos.forEach(video => {
+            const videoDiv = document.createElement("div");
+            videoDiv.classList.add("video-item");
+            videoDiv.innerHTML = `
+                <a href="${video.url}" target="_blank">
+                    <strong>${video.name}</strong>
+                </a>
+                <p>Release Date: ${video.release_date}</p>
+                <p>Requested: ${video.is_requested ? "Yes" : "No"}, Downloaded: ${video.is_downloaded ? "Yes" : "No"}</p>
+            `;
+            videoList.appendChild(videoDiv);
+        });
+
+        seasonDiv.appendChild(videoList);
+        seasonsContainer.appendChild(seasonDiv);
+    }
+}
+
+// Initial fetch of videos
+fetchVideos();
 </script>
 "#;

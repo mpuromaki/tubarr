@@ -1,9 +1,9 @@
 //! API endpoints for channelS
 
-use std::collections::HashMap;
-
 use rocket::{form::Form, get, post, response::Redirect, serde::json::Json, FromForm, State};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
 use crate::DBPool;
 
