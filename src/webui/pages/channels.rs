@@ -35,9 +35,13 @@ const HTML_CHANNELS: &'static str = r#"
 </div>
 
 <script>
-// Helper function to URL-encode the channel name
-function encodeChannelName(name) {
-    return encodeURIComponent(name.toLowerCase());
+
+function normalizeChannelName(channelName) {
+    // Replace apostrophes and other unwanted characters with empty string
+    let normalized = channelName.replace(/['"]/g, ""); // Remove quotes
+    normalized = normalized.replace(/\s+/g, "-"); // Replace spaces with hyphens
+    normalized = normalized.toLowerCase(); // Optional: Normalize to lowercase
+    return normalized;
 }
 
 // Fetch channels and update the list every 5 seconds
@@ -52,7 +56,7 @@ async function fetchChannels() {
 
         channels.forEach(channel => {
             const li = document.createElement('li');
-            const encodedName = encodeChannelName(channel.channel_name);
+            const encodedName = normalizeChannelName(channel.channel_name);
             const link = `/channels/${channel.domain}/${encodedName}`;
 
             li.innerHTML = `<a href="${link}">
@@ -76,7 +80,7 @@ fetchChannels(); // Initial fetch to load channels right away
 pub async fn get_channel_videos(
     domain: String,
     channel: String,
-    _db_pool: &State<DBPool>,
+    db_pool: &State<DBPool>,
 ) -> (ContentType, String) {
     let span = span!(Level::DEBUG, "get_channel_videos");
     let _enter = span.enter();
@@ -84,10 +88,21 @@ pub async fn get_channel_videos(
     debug!("Domain: {}", domain);
     debug!("Channel: {}", channel);
 
+    // Get additional data from DB
+    let conn = db_pool.get().expect("Failed to get DB connection");
+    let mut stmt = conn
+        .prepare("SELECT channel_id FROM channels WHERE domain = ? AND channel_name_normalized = ?")
+        .expect("Failed to prepare query");
+
+    let channel_id: String = stmt
+        .query_row(rusqlite::params![domain, channel], |row| row.get(0))
+        .expect("Failed to retrieve channel_id");
+
     // Render page with dynamic placeholders for JavaScript
     let page_content = HTML_CHANNEL_VIDEOS
         .replace("{{DOMAIN}}", &domain)
-        .replace("{{CHANNEL}}", &channel);
+        .replace("{{CHANNEL}}", &channel)
+        .replace("{{CHANNEL_ID}}", &channel_id);
 
     (ContentType::HTML, render_page("", &page_content))
 }
@@ -96,12 +111,17 @@ pub async fn get_channel_videos(
 const HTML_CHANNEL_VIDEOS: &str = r#"
 <div class="section">
     <h1>Channel Videos - {{CHANNEL}}</h1>
+    
+    <!-- Fetch All Videos Button -->
+    <button id="fetch-videos-button" onclick="fetchAllVideos()">Fetch All Videos</button>
+    
     <div id="seasons-container">
         <!-- Videos grouped by season will be populated here by JavaScript -->
     </div>
 </div>
 
 <script>
+// Fetch videos grouped by season
 async function fetchVideos() {
     const domain = "{{DOMAIN}}";
     const channel = "{{CHANNEL}}";
@@ -149,6 +169,35 @@ async function fetchVideos() {
 
         seasonDiv.appendChild(videoList);
         seasonsContainer.appendChild(seasonDiv);
+    }
+}
+
+// Function to fetch all videos
+async function fetchAllVideos() {
+    const domain = "{{DOMAIN}}";
+    const channelId = "{{CHANNEL_ID}}";
+
+    try {
+        const response = await fetch("/api/channel/fetch", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+                domain: domain,
+                channel_id: channelId
+            })
+        });
+
+        if (response.ok) {
+            console.log("Fetch request sent successfully");
+            // Optionally, refetch videos to update the page content
+            await fetchVideos();
+        } else {
+            console.error("Failed to send fetch request");
+        }
+    } catch (error) {
+        console.error("Error in fetchAllVideos:", error);
     }
 }
 

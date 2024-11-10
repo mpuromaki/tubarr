@@ -52,6 +52,7 @@ pub async fn rocket(dbp: DBPool) -> Result<Rocket<Ignite>> {
                 api::post_channel,
                 api::get_channels,
                 api::get_videos,
+                api::post_channel_fetch,
             ],
         )
         .mount(

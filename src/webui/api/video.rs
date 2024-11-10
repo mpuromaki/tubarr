@@ -61,7 +61,7 @@ pub async fn get_videos(
         .map(|video| video.expect("Failed to map video"))
         .collect();
 
-    debug!("Found: {:?}", videos);
+    //debug!("Found: {:?}", videos);
 
     Json(videos)
 }

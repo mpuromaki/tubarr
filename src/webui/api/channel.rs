@@ -1,6 +1,8 @@
 //! API endpoints for channelS
 
-use rocket::{form::Form, get, post, response::Redirect, serde::json::Json, FromForm, State};
+use rocket::{
+    form::Form, get, http::Status, post, response::Redirect, serde::json::Json, FromForm, State,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
@@ -32,6 +34,30 @@ pub async fn post_channel(data: Form<PostFormChannel>, db_pool: &State<DBPool>) 
     .expect("Could not write to db.");
 
     Redirect::to("/channels")
+}
+
+#[derive(FromForm, Deserialize, Serialize)]
+struct PostFetchChannel {
+    domain: String,
+    channel_id: String,
+}
+
+#[post("/channel/fetch", data = "<data>")]
+pub async fn post_channel_fetch(data: Form<PostFetchChannel>, db_pool: &State<DBPool>) -> Status {
+    let conn = db_pool.get().expect("Failed to get DB connection");
+
+    // Create task
+    conn.execute(
+        "INSERT INTO tasks (task_type, task_data, task_state) VALUES (?1, ?2, ?3)",
+        [
+            "CHANNEL-FETCH",
+            &serde_json::to_string(&data.into_inner()).unwrap(),
+            "WAIT",
+        ],
+    )
+    .expect("Could not write to db.");
+
+    Status::Ok
 }
 
 #[derive(Serialize)]
