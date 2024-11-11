@@ -38,65 +38,73 @@ pub fn run(dbp: DBPool) {
         }
     };
 
+    let concurrency_limit = 3;
+    let mut concurrency = 0;
+
     loop {
         // Sleep so we don't trash the CPU
         thread::sleep(time::Duration::from_secs(1));
 
         // Check for tasks
-        if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
-            for task in new_tasks {
-                match task.task_type.as_str() {
-                    "DL-VIDEO" => {
-                        debug!("DL-VIDEO: {:?}", task);
-                        mark_task_wip(dbp.clone(), task.task_id);
-                        let thrd_conf = conf.clone();
-                        let thrd_tx = result_tx.clone();
-                        let thrd_dbp = dbp.clone();
-                        thread::spawn(move || {
-                            task_download::worker(
-                                task.task_id,
-                                task.task_data,
-                                thrd_conf,
-                                thrd_tx,
-                                thrd_dbp,
-                            )
-                        });
-                    }
-                    "CHANNEL-ADD" => {
-                        debug!("CHANNEL-ADD: {:?}", task);
-                        mark_task_wip(dbp.clone(), task.task_id);
-                        let thrd_conf = conf.clone();
-                        let thrd_tx = result_tx.clone();
-                        let thrd_dbp = dbp.clone();
-                        thread::spawn(move || {
-                            task_channel::add(
-                                task.task_id,
-                                task.task_data,
-                                thrd_conf,
-                                thrd_tx,
-                                thrd_dbp,
-                            )
-                        });
-                    }
-                    "CHANNEL-FETCH" => {
-                        debug!("CHANNEL-FETCH: {:?}", task);
-                        mark_task_wip(dbp.clone(), task.task_id);
-                        let thrd_conf = conf.clone();
-                        let thrd_tx = result_tx.clone();
-                        let thrd_dbp = dbp.clone();
-                        thread::spawn(move || {
-                            task_channel::fetch(
-                                task.task_id,
-                                task.task_data,
-                                thrd_conf,
-                                thrd_tx,
-                                thrd_dbp,
-                            )
-                        });
-                    }
-                    _ => {
-                        error!("Unknown task type: {:?}", task);
-                        mark_task_error(dbp.clone(), task.task_id);
+        if concurrency < concurrency_limit {
+            if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
+                for task in new_tasks {
+                    match task.task_type.as_str() {
+                        "DL-VIDEO" => {
+                            debug!("DL-VIDEO: {:?}", task);
+                            concurrency += 1;
+                            mark_task_wip(dbp.clone(), task.task_id);
+                            let thrd_conf = conf.clone();
+                            let thrd_tx = result_tx.clone();
+                            let thrd_dbp = dbp.clone();
+                            thread::spawn(move || {
+                                task_download::worker(
+                                    task.task_id,
+                                    task.task_data,
+                                    thrd_conf,
+                                    thrd_tx,
+                                    thrd_dbp,
+                                )
+                            });
+                        }
+                        "CHANNEL-ADD" => {
+                            debug!("CHANNEL-ADD: {:?}", task);
+                            concurrency += 1;
+                            mark_task_wip(dbp.clone(), task.task_id);
+                            let thrd_conf = conf.clone();
+                            let thrd_tx = result_tx.clone();
+                            let thrd_dbp = dbp.clone();
+                            thread::spawn(move || {
+                                task_channel::add(
+                                    task.task_id,
+                                    task.task_data,
+                                    thrd_conf,
+                                    thrd_tx,
+                                    thrd_dbp,
+                                )
+                            });
+                        }
+                        "CHANNEL-FETCH" => {
+                            debug!("CHANNEL-FETCH: {:?}", task);
+                            concurrency += 1;
+                            mark_task_wip(dbp.clone(), task.task_id);
+                            let thrd_conf = conf.clone();
+                            let thrd_tx = result_tx.clone();
+                            let thrd_dbp = dbp.clone();
+                            thread::spawn(move || {
+                                task_channel::fetch(
+                                    task.task_id,
+                                    task.task_data,
+                                    thrd_conf,
+                                    thrd_tx,
+                                    thrd_dbp,
+                                )
+                            });
+                        }
+                        _ => {
+                            error!("Unknown task type: {:?}", task);
+                            mark_task_error(dbp.clone(), task.task_id);
+                        }
                     }
                 }
             }
@@ -104,7 +112,7 @@ pub fn run(dbp: DBPool) {
 
         // Check for worker reports, update tasks state
         while let Ok(result) = result_rx.try_recv() {
-            // Update the result to the DB
+            concurrency -= 1;
             debug!("TASK RESULT: {:?}", result);
             match result {
                 TaskResult::Ok(id) => mark_task_done(dbp.clone(), id),
