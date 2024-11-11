@@ -158,10 +158,14 @@ async function fetchVideos() {
     for (const season of sortedSeasons) {
         const seasonDiv = document.createElement("div");
         seasonDiv.classList.add("season");
-        seasonDiv.innerHTML = `<h2>Season: ${season}</h2>`;
+        seasonDiv.innerHTML = `<h2>Season: ${season}</h2>
+            <button onclick="requestSeason('${season}')">Request Season</button>`; // New Request Season Button
 
         const videoList = document.createElement("div");
         videoList.classList.add("videos-list");
+
+        // Sort videos within each season by release date (newest first)
+        videosBySeason[season].sort((a, b) => new Date(b.release_date) - new Date(a.release_date));
 
         videosBySeason[season].forEach(video => {
             const videoDiv = document.createElement("div");
@@ -172,12 +176,67 @@ async function fetchVideos() {
                 </a>
                 <p>Release Date: ${video.release_date}</p>
                 <p>Requested: ${video.is_requested ? "Yes" : "No"}, Downloaded: ${video.is_downloaded ? "Yes" : "No"}</p>
+                ${!video.is_requested ? `<button onclick="requestVideo('${video.url}')">Request</button>` : ""}
             `;
             videoList.appendChild(videoDiv);
         });
 
         seasonDiv.appendChild(videoList);
         seasonsContainer.appendChild(seasonDiv);
+    }
+}
+
+// Function to request all videos in a season
+async function requestSeason(season) {
+    const domain = "{{DOMAIN}}";
+    const channel = "{{CHANNEL}}";
+    
+    // Fetch videos for the current channel to get videos by season
+    const response = await fetch(`/api/videos/${domain}/${channel}`);
+    if (!response.ok) {
+        console.error("Failed to fetch videos");
+        return;
+    }
+
+    const videos = await response.json();
+    const videosInSeason = videos.filter(video => (video.season || "unknown") === season && !video.is_requested);
+
+    if (videosInSeason.length === 0) {
+        alert("All videos in this season have already been requested.");
+        return;
+    }
+
+    // Send a request for each video in the season that hasn't been requested
+    for (const video of videosInSeason) {
+        await requestVideo(video.url);
+    }
+
+    alert(`Requested all videos in season ${season}`);
+}
+
+// Function to send a request to download a video
+async function requestVideo(url) {
+    try {
+        const response = await fetch("/api/task", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: new URLSearchParams({
+                url: url,
+                typ: "DL-VIDEO"
+            })
+        });
+
+        if (response.ok) {
+            console.log("Request sent successfully");
+            await fetchVideos(); // Refresh videos to reflect "Requested" status
+        } else {
+            console.error("Failed to request video download");
+            alert("Failed to request download. Please try again.");
+        }
+    } catch (error) {
+        console.error("Error in requestVideo:", error);
     }
 }
 
@@ -200,8 +259,7 @@ async function fetchAllVideos() {
 
         if (response.ok) {
             console.log("Fetch request sent successfully");
-            // Optionally, refetch videos to update the page content
-            await fetchVideos();
+            await fetchVideos(); // Update page content after fetching
         } else {
             console.error("Failed to send fetch request");
         }
