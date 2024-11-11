@@ -145,8 +145,17 @@ async function fetchVideos() {
         videosBySeason[season].push(video);
     });
 
+    // Sort seasons in descending order by season number
+    const sortedSeasons = Object.keys(videosBySeason)
+        .sort((a, b) => {
+            // Convert season numbers to integers and handle "unknown" case
+            const seasonA = a === "unknown" ? -1 : parseInt(a);
+            const seasonB = b === "unknown" ? -1 : parseInt(b);
+            return seasonB - seasonA; // Descending order
+        });
+
     // Create HTML for each season and its videos
-    for (const [season, videos] of Object.entries(videosBySeason)) {
+    for (const season of sortedSeasons) {
         const seasonDiv = document.createElement("div");
         seasonDiv.classList.add("season");
         seasonDiv.innerHTML = `<h2>Season: ${season}</h2>`;
@@ -154,7 +163,7 @@ async function fetchVideos() {
         const videoList = document.createElement("div");
         videoList.classList.add("videos-list");
 
-        videos.forEach(video => {
+        videosBySeason[season].forEach(video => {
             const videoDiv = document.createElement("div");
             videoDiv.classList.add("video-item");
             videoDiv.innerHTML = `
