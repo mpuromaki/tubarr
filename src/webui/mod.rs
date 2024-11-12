@@ -53,16 +53,10 @@ pub async fn rocket(dbp: DBPool) -> Result<Rocket<Ignite>> {
                 api::get_channels,
                 api::get_videos,
                 api::post_channel_fetch,
+                api::post_video,
             ],
         )
-        .mount(
-            "/",
-            routes![
-                pages::get_home,
-                pages::get_channels,
-                pages::get_channel_videos
-            ],
-        )
+        .mount("/", routes![pages::get_home, pages::get_channel_videos])
         .ignite()
         .await?;
 

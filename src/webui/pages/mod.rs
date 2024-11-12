@@ -29,6 +29,11 @@ const TMPL_2: &'static str = r###"
     <div class="container">
         <header class="top-bar">
             <div class="logo">Tubarr</div>
+            <div class="download-video">
+                <label for="video-url">Download video:</label>
+                <input type="text" id="video-url" placeholder="Enter video URL" />
+                <button onclick="downloadVideo()">Download</button>
+            </div>
             <div class="user-button">User</div>
         </header>
         <aside class="side-bar">
@@ -36,7 +41,6 @@ const TMPL_2: &'static str = r###"
             <nav>
                 <ul>
                     <li><a href="/">Home</a></li>
-                    <li><a href="/channels">Channels</a></li>
                 </ul>
             </nav>
         </aside>
@@ -46,6 +50,33 @@ const TMPL_2: &'static str = r###"
 const TMPL_3: &'static str = r###"
         </main>
     </div>
+    <script>
+        async function downloadVideo() {
+            const url = document.getElementById('video-url').value;
+            if (!url) {
+                alert("Please enter a video URL.");
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (response.ok) {
+                    alert("Video download request submitted successfully.");
+                } else {
+                    alert("Failed to submit video download request.");
+                }
+            } catch (error) {
+                alert("An error occurred: " + error.message);
+            }
+        }
+    </script>
 </body>
 </html>
 "###;

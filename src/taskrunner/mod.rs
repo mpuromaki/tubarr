@@ -50,8 +50,8 @@ pub fn run(dbp: DBPool) {
             if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
                 for task in new_tasks {
                     match task.task_type.as_str() {
-                        "DL-VIDEO" => {
-                            debug!("DL-VIDEO: {:?}", task);
+                        "VIDEO-DOWNLOAD" => {
+                            debug!("VIDEO-DOWNLOAD: {:?}", task);
                             concurrency += 1;
                             mark_task_wip(dbp.clone(), task.task_id);
                             let thrd_conf = conf.clone();

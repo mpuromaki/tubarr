@@ -7,75 +7,6 @@ use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
 use super::render_page;
 
-#[get("/channels")]
-pub async fn get_channels(db_pool: &State<DBPool>) -> (ContentType, String) {
-    // let conn = db_pool.get().expect("Failed to get DB connection");
-
-    let page = render_page("", HTML_CHANNELS);
-
-    (ContentType::HTML, page)
-}
-
-const HTML_CHANNELS: &'static str = r#"
-<div class="section">
-    <h1>Add Channel</h1>
-    <form action="/api/channel" method="post">
-        <label for="url">URL to add:</label>
-        <input type="text" id="url" name="url" required>
-        <button type="submit">Add</button>
-    </form>
-    <p>This will add a background task to fetch the channel's information.</p>
-</div>
-
-<div class="section">
-    <h2>Followed Channels</h2>
-    <ul id="channels-list">
-        <!-- Channel items will be populated here by JavaScript -->
-    </ul>
-</div>
-
-<script>
-
-function normalizeChannelName(channelName) {
-    // Replace apostrophes and other unwanted characters with empty string
-    let normalized = channelName.replace(/['"]/g, ""); // Remove quotes
-    normalized = normalized.replace(/\s+/g, "-"); // Replace spaces with hyphens
-    normalized = normalized.toLowerCase(); // Optional: Normalize to lowercase
-    return normalized;
-}
-
-// Fetch channels and update the list every 5 seconds
-async function fetchChannels() {
-    try {
-        const response = await fetch('/api/channels');
-        if (!response.ok) throw new Error('Network response was not ok');
-        
-        const channels = await response.json();
-        const channelsList = document.getElementById('channels-list');
-        channelsList.innerHTML = ''; // Clear the existing list
-
-        channels.forEach(channel => {
-            const li = document.createElement('li');
-            const encodedName = normalizeChannelName(channel.channel_name);
-            const link = `/channels/${channel.domain}/${encodedName}`;
-
-            li.innerHTML = `<a href="${link}">
-                                <strong>${channel.channel_name}</strong> 
-                            </a> 
-                            (ID: ${channel.channel_id})`;
-            channelsList.appendChild(li);
-        });
-    } catch (error) {
-        console.error('Error fetching channels:', error);
-    }
-}
-
-// Poll the API every 5 seconds
-// setInterval(fetchChannels, 5000);
-fetchChannels(); // Initial fetch to load channels right away
-</script>
-"#;
-
 #[get("/channels/<domain>/<channel>")]
 pub async fn get_channel_videos(
     domain: String,
@@ -156,9 +87,9 @@ async function fetchVideos() {
 
     // Create HTML for each season and its videos
     for (const season of sortedSeasons) {
-        const seasonDiv = document.createElement("div");
-        seasonDiv.classList.add("season");
-        seasonDiv.innerHTML = `<h2>Season: ${season}</h2>
+        const seasonDetails = document.createElement("details");
+        seasonDetails.classList.add("season");
+        seasonDetails.innerHTML = `<summary><h2>Season: ${season}</h2></summary>
             <button onclick="requestSeason('${season}')">Request Season</button>`; // New Request Season Button
 
         const videoList = document.createElement("div");
@@ -181,8 +112,8 @@ async function fetchVideos() {
             videoList.appendChild(videoDiv);
         });
 
-        seasonDiv.appendChild(videoList);
-        seasonsContainer.appendChild(seasonDiv);
+        seasonDetails.appendChild(videoList);
+        seasonsContainer.appendChild(seasonDetails);
     }
 }
 

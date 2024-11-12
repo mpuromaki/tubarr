@@ -1,5 +1,8 @@
-use rocket::{get, serde::json::Json, State};
-use serde::Serialize;
+use std::collections::HashMap;
+
+use rocket::{get, http::Status, post, serde::json::Json, State};
+use rusqlite::params;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
 use crate::DBPool;
@@ -64,4 +67,52 @@ pub async fn get_videos(
     //debug!("Found: {:?}", videos);
 
     Json(videos)
+}
+
+#[derive(Deserialize, Serialize)]
+struct FromPostVideo {
+    url: String,
+}
+
+#[post("/video", format = "json", data = "<data>")]
+pub async fn post_video(data: Json<FromPostVideo>, db_pool: &State<DBPool>) -> Status {
+    let conn = db_pool.get().expect("Failed to get DB connection");
+
+    // Check if the URL already exists in the `videos` table
+    let mut stmt = conn
+        .prepare("SELECT COUNT(*) FROM videos WHERE url = ?1")
+        .expect("Failed to prepare statement");
+
+    let exists: bool = stmt
+        .query_row([&data.url], |row| {
+            row.get::<_, i64>(0).map(|count| count > 0)
+        })
+        .expect("Failed to execute query");
+
+    if exists {
+        // Update the `is_requested` field to 1 for the existing video entry
+        conn.execute(
+            "UPDATE videos SET is_requested = 1 WHERE url = ?1",
+            params![&data.url],
+        )
+        .expect("Failed to update video record");
+    }
+
+    // Prepare the data for inserting a new task in the tasks table
+    let mut outgoing = HashMap::new();
+    outgoing.insert("url".to_owned(), data.url.clone());
+
+    // Insert a new row into the `tasks` table
+    conn.execute(
+        "INSERT INTO tasks (task_type, task_data, task_state) VALUES (?1, ?2, ?3)",
+        params![
+            "VIDEO-DOWNLOAD",
+            serde_json::to_string(&outgoing).unwrap(),
+            "WAIT"
+        ],
+    )
+    .expect("Could not insert task into db");
+
+    // Return a 200 OK response
+    Status::Ok
 }
