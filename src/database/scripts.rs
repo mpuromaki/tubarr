@@ -63,6 +63,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_5_channels,
         upgrade_6_videos,
         upgrade_7_channels_normalized_name,
+        upgrade_8_tasks_persistent,
     ]
 }
 
@@ -286,5 +287,27 @@ pub fn upgrade_7_channels_normalized_name(
         "Add normalized channel name for case-insensitive matching",
         conn,
     )?;
+    Ok(())
+}
+
+/// Upgrade: Create persistent tasks table for timed tasks
+pub fn upgrade_8_tasks_persistent(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS tasks_persistent (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_name TEXT NOT NULL,
+            last_exec DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            delay_sec INTEGER NOT NULL DEFAULT 86400
+        )",
+        [],
+    )
+    .context("Failed to create tasks_persistent table")?;
+
+    // Insert initial configuration
+    let insert_job = "INSERT INTO tasks_persistent (task_name, delay_sec) VALUES (?1, ?2)";
+    conn.execute(insert_job, params!["DB-CLEAN-TASKS", 14400])?; // Every 4 hours
+
+    // Set DB version
+    insert_version(8, "Create persistent background tasks", conn)?;
     Ok(())
 }

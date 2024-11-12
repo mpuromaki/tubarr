@@ -9,7 +9,10 @@
 //! <PATH_MEDIA>/<CHANNEL>/<YYYY>/<FILENAME>
 
 use anyhow::Result;
+use bgtask_db_clean::db_clean_tasks;
+use chrono::NaiveDateTime;
 use core::{str, time};
+use rand::Rng;
 use rusqlite::params;
 use std::collections::HashMap;
 use std::fs;
@@ -24,6 +27,7 @@ use tracing::{debug, error, event, info, trace, warn};
 use super::DBPool;
 use super::FLAG_SHUTDOWN;
 
+mod bgtask_db_clean;
 mod task_channel;
 mod task_download;
 
@@ -43,9 +47,11 @@ pub fn run(dbp: DBPool) {
 
     loop {
         // Sleep so we don't trash the CPU
-        thread::sleep(time::Duration::from_secs(1));
+        thread::sleep(time::Duration::from_secs(
+            rand::thread_rng().gen_range(2..8),
+        ));
 
-        // Check for tasks
+        // Check for one-off tasks
         if concurrency < concurrency_limit {
             if let Ok(new_tasks) = get_new_tasks(dbp.clone()) {
                 for task in new_tasks {
@@ -106,6 +112,20 @@ pub fn run(dbp: DBPool) {
                             mark_task_error(dbp.clone(), task.task_id);
                         }
                     }
+                }
+            }
+        }
+
+        // Check for persisten background tasks
+        if let Ok(activated_tasks) = get_new_persistent_tasks(dbp.clone()) {
+            for task in activated_tasks {
+                match task.task_name.as_str() {
+                    "DB-CLEAN-TASKS" => {
+                        debug!("RUN BG TASK: DB-CLEAN-TASKS");
+                        let thrd_dbp = dbp.clone();
+                        thread::spawn(move || db_clean_tasks(task.task_id, thrd_dbp));
+                    }
+                    _ => error!("Unknown persistent task: {:?}", task),
                 }
             }
         }
@@ -180,6 +200,46 @@ fn get_new_tasks(dbp: DBPool) -> Result<Vec<TaskRaw>> {
                 task_type: row.get(1)?,
                 task_data: row.get(2)?,
                 task_state: row.get(3)?,
+            })
+        })?
+        .filter_map(|res| res.ok())
+        .collect();
+
+    Ok(tasks)
+}
+
+#[derive(Debug)]
+struct PersistentTaskRaw {
+    task_id: isize,
+    task_name: String,
+    last_exec: NaiveDateTime,
+    delay_sec: isize,
+}
+
+fn get_new_persistent_tasks(dbp: DBPool) -> Result<Vec<PersistentTaskRaw>> {
+    let conn = dbp
+        .get()
+        .expect("Failed to get database connection from pool");
+
+    // Prepare SQL statement to select all tasks where last_exec + delay_sec < current time
+    let mut stmt =
+        conn.prepare("SELECT 
+                            id, 
+                            task_name, 
+                            last_exec, 
+                            delay_sec
+                        FROM tasks_persistent
+                        WHERE (CAST(strftime('%s', last_exec) AS INTEGER) + delay_sec) < CAST(strftime('%s', 'now') AS INTEGER)
+                    ")?;
+
+    // Execute the query and get an iterator over the rows
+    let tasks = stmt
+        .query_map(params![], |row| {
+            Ok(PersistentTaskRaw {
+                task_id: row.get(0)?,
+                task_name: row.get(1)?,
+                last_exec: row.get(2)?, // Ensure this is in NaiveDateTime format
+                delay_sec: row.get(3)?,
             })
         })?
         .filter_map(|res| res.ok())
