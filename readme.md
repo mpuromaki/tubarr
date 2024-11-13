@@ -4,6 +4,19 @@ Tubarr is Sonarr-like software for managing and downloading (with yt-dlp) Youtub
 Idea is that users can either copy&paste interested videos for downloading, or that Tubarr
 will track channels and automatically download videos.
 
+## Requirements
+
+- Local installation of ```ffmpeg```
+- Local installation of ```yt-dlp```
+- Built binary of tubarr
+
+## Running
+
+- Run Tubarr binary: ```./tubarr```
+- Answer configuration questions on the first startup.
+- (All data is stored in the sqlite database alongside tubarr binary.)
+- Open Tubarr UI with web browser: http://127.0.0.1:8000/
+
 ## Hard truths
 
 Let's start by stating the hard truths about this software. I am not a programmer. I do not
@@ -20,7 +33,7 @@ But I'm not against fixing issues. Atleast for now.
 
 ### Contributing
 
-Feel free to contribute, but read these hard truths first. If I don't understand your
+Feel free to contribute, but read those hard truths first. If I don't understand your
 pull request, I'm not going to pull it.
 
 ## Roadmap
@@ -29,7 +42,9 @@ pull request, I'm not going to pull it.
 - [x] Web UI
 - [x] Downloading single youtube videos
 - [x] Tracking youtube channels
+- [x] Linux support
+- [ ] Windows support
 - [ ] Downloading tracked channels automatically
 - [ ] Users handling
-- [ ] Security, API-keys, whatever
+- [ ] Security, API-keys, etc
 - [ ] Beautiful Web UI
