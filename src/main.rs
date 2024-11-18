@@ -10,22 +10,27 @@ use core::time;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::params;
-use std::io::Write;
 use std::{
     env, io,
+    path::PathBuf,
     sync::{atomic::AtomicBool, Arc},
     thread,
 };
+use std::{io::Write, sync::OnceLock};
 use tracing::{debug, error, event, info, trace, warn};
 
 mod database;
+mod folders;
 mod taskrunner;
 mod webui;
 
 pub type DBPool = Arc<Pool<SqliteConnectionManager>>;
 
-static DB_PATH: &'static str = "./db.sqlite";
+// v-- GLOBALS
 static FLAG_SHUTDOWN: AtomicBool = AtomicBool::new(false);
+static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+static APP_DETAILS: OnceLock<folders::AppDetails> = OnceLock::new();
+// ^-- GLOBALS
 
 fn main() {
     // Initialize tracing (logging)
@@ -36,8 +41,21 @@ fn main() {
         .compact()
         .init();
 
+    // Initialize globals
+    APP_DETAILS
+        .set(folders::AppDetails {
+            name: env!("CARGO_PKG_NAME").to_lowercase().to_string(),
+            organization: String::from("amnis"),
+            tld: String::from("fi"),
+        })
+        .unwrap();
+
+    let mut sqlite_path = folders::system_configuration(&APP_DETAILS.get().unwrap()).unwrap();
+    sqlite_path.push("db.sqlite");
+    DB_PATH.set(sqlite_path).unwrap();
+
     // Initialize the database
-    let dbp = database::init_from(DB_PATH);
+    let dbp = database::init_from(DB_PATH.get().unwrap());
 
     // Set up CTRL+C handling, for clean shutdown
     ctrlc::set_handler(move || {

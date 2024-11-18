@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fs, path::PathBuf, sync::Arc};
 
 use anyhow::{anyhow, Context, Ok, Result};
 use r2d2::{self, Pool, PooledConnection};
@@ -8,8 +8,10 @@ use tracing::{debug, error, event, info, trace, warn};
 
 mod scripts;
 
-pub fn init_from(filepath: &str) -> Arc<r2d2::Pool<SqliteConnectionManager>> {
-    // Initialise database connection
+pub fn init_from(filepath: &PathBuf) -> Arc<r2d2::Pool<SqliteConnectionManager>> {
+    info!("Loading database from: {:#?}", filepath);
+
+    // Initialize the database connection
     let sqlite_conman = SqliteConnectionManager::file(filepath);
     let sqlite_pool = r2d2::Pool::new(sqlite_conman).expect("Failed to start SQLITE pool.");
     let pool = Arc::new(sqlite_pool);
