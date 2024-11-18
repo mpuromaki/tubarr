@@ -14,7 +14,7 @@ will track channels and automatically download videos.
 
 - Run Tubarr binary: ```./tubarr```
 - Answer configuration questions on the first startup.
-- (All data is stored in the sqlite database alongside tubarr binary.)
+- (All data is stored in the sqlite database, in system specific configuration folder.)
 - Open Tubarr UI with web browser: http://127.0.0.1:8000/
 
 ## Hard truths
@@ -41,8 +41,8 @@ pull request, I'm not going to pull it.
 - [x] Basic setup of database, webserver, background tasks
 - [x] Web UI
 - [x] Downloading single youtube videos
-- [x] Tracking youtube channels
-- [x] Linux support
+- [/] Tracking youtube channels
+- [/] Linux support
 - [ ] Windows support
 - [ ] Downloading tracked channels automatically
 - [ ] Users handling
