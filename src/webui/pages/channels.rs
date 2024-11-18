@@ -148,14 +148,13 @@ async function requestSeason(season) {
 // Function to send a request to download a video
 async function requestVideo(url) {
     try {
-        const response = await fetch("/api/task", {
+        const response = await fetch("/api/video/", {
             method: "POST",
             headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Type": "application/json",  // Set content type to JSON
             },
-            body: new URLSearchParams({
-                url: url,
-                typ: "DL-VIDEO"
+            body: JSON.stringify({
+                url: url
             })
         });
 
