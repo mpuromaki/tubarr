@@ -1,5 +1,7 @@
 # Tubarr
 
+:warning: As you might notice, this is still very much work-in-progress. Expect breaking changes.
+
 Tubarr is Sonarr-like software for managing and downloading (with yt-dlp) Youtube etc videos.
 Idea is that users can either copy&paste interested videos for downloading, or that Tubarr
 will track channels and automatically download videos.
