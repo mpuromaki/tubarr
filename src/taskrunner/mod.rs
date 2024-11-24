@@ -9,9 +9,12 @@
 //! <PATH_MEDIA>/<CHANNEL>/<YYYY>/<FILENAME>
 
 use anyhow::Result;
+use bgtask_channel_fetch::bg_channel_fetch;
 use bgtask_db_clean::db_clean_tasks;
 use chrono::NaiveDateTime;
 use core::{str, time};
+use r2d2::PooledConnection;
+use r2d2_sqlite::SqliteConnectionManager;
 use rand::Rng;
 use rusqlite::params;
 use std::collections::HashMap;
@@ -27,6 +30,7 @@ use tracing::{debug, error, event, info, trace, warn};
 use super::DBPool;
 use super::FLAG_SHUTDOWN;
 
+mod bgtask_channel_fetch;
 mod bgtask_db_clean;
 mod task_channel;
 mod task_download;
@@ -124,6 +128,11 @@ pub fn run(dbp: DBPool) {
                         debug!("RUN BG TASK: DB-CLEAN-TASKS");
                         let thrd_dbp = dbp.clone();
                         thread::spawn(move || db_clean_tasks(task.task_id, thrd_dbp));
+                    }
+                    "BG-CHANNEL-FETCH" => {
+                        debug!("RUN BG TASK: BG-CHANNEL-FETCH");
+                        let thrd_dbp = dbp.clone();
+                        thread::spawn(move || bg_channel_fetch(task.task_id, thrd_dbp));
                     }
                     _ => error!("Unknown persistent task: {:?}", task),
                 }
@@ -353,4 +362,16 @@ fn parse_domain(url: &str) -> String {
         extracted.suffix.unwrap()
     );
     domain
+}
+
+fn update_bgtask_exec_time(id: isize, conn: &PooledConnection<SqliteConnectionManager>) {
+    if let Err(_) = conn.execute(
+        "UPDATE tasks_persistent 
+                SET last_exec = datetime('now') 
+                WHERE id = ?1",
+        params![id],
+    ) {
+        // Nothing we can do. Let's try again later.
+        return;
+    }
 }

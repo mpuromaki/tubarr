@@ -64,6 +64,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_6_videos,
         upgrade_7_channels_normalized_name,
         upgrade_8_tasks_persistent,
+        upgrade_9_channel_fetch_bg,
     ]
 }
 
@@ -309,5 +310,15 @@ pub fn upgrade_8_tasks_persistent(conn: &PooledConnection<SqliteConnectionManage
 
     // Set DB version
     insert_version(8, "Create persistent background tasks", conn)?;
+    Ok(())
+}
+
+// Upgrade: Add background task for fetching new videos for channels
+pub fn upgrade_9_channel_fetch_bg(conn: &PooledConnection<SqliteConnectionManager>) -> Result<()> {
+    let insert_job = "INSERT INTO tasks_persistent (task_name, delay_sec) VALUES (?1, ?2)";
+    conn.execute(insert_job, params!["BG-CHANNEL-FETCH", 28800])?; // Every 8 hours
+
+    // Set DB version
+    insert_version(9, "Persistent task: Channel fetch", conn)?;
     Ok(())
 }
