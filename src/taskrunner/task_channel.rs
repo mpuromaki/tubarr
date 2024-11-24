@@ -105,8 +105,8 @@ pub fn add(
     if let Ok(conn) = dbp.get() {
         // Prepare the SQL statement to update the task
         if let Err(e) = conn.execute(
-            "INSERT INTO channels (domain, url, channel_id, channel_name) VALUES (?1, ?2, ?3, ?4)",
-            params![domain, url, channel_id, channel_name],
+            "INSERT INTO channels (domain, url, channel_id, channel_name, channel_name_normalized) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![domain, url, channel_id, channel_name, normalized_channel_name],
         ) {
             error!("Error inserting channel for task {}: {}", task_id, e);
             let _ = sender.send(TaskResult::Err(task_id, -500));

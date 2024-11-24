@@ -1,6 +1,7 @@
 use anyhow::{Context, Ok, Result};
 use r2d2::PooledConnection;
 use r2d2_sqlite::SqliteConnectionManager;
+use regex::Regex;
 use rusqlite::params;
 use tracing::{debug, error, event, info, info_span, span, trace, warn, Level};
 
@@ -65,6 +66,7 @@ pub fn upgrades_as_list() -> Vec<fn(&PooledConnection<SqliteConnectionManager>) 
         upgrade_7_channels_normalized_name,
         upgrade_8_tasks_persistent,
         upgrade_9_channel_fetch_bg,
+        upgrade_10_fix_channel_names,
     ]
 }
 
@@ -321,4 +323,66 @@ pub fn upgrade_9_channel_fetch_bg(conn: &PooledConnection<SqliteConnectionManage
     // Set DB version
     insert_version(9, "Persistent task: Channel fetch", conn)?;
     Ok(())
+}
+
+/// Upgrade: Fix channel_name normalization, remove triggers.
+// Based on testing I just can not make these triggers work. So it's up to the caller to insert normalized name as well.
+pub fn upgrade_10_fix_channel_names(
+    conn: &PooledConnection<SqliteConnectionManager>,
+) -> Result<()> {
+    // Re-normalize existing data using updated normalization logic
+    let mut stmt = conn
+        .prepare("SELECT id, channel_name FROM channels;")
+        .context("Failed to prepare select query for normalization")?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            let id: i64 = row.get(0)?;
+            let channel_name: String = row.get(1)?;
+
+            // Perform normalization; map any errors into rusqlite::Error
+            let normalized_name = normalize_channel_name(&channel_name);
+
+            anyhow::Result::Ok((id, normalized_name))
+        })
+        .context("Failed to query existing rows for normalization")?;
+
+    for row in rows {
+        let (id, normalized_name) = row?;
+        conn.execute(
+            "UPDATE channels SET channel_name_normalized = ?1 WHERE id = ?2;",
+            (&normalized_name, &id),
+        )
+        .context("Failed to update normalized channel name for existing rows")?;
+    }
+
+    // Replace the existing trigger to handle both inserts and updates
+    conn.execute("DROP TRIGGER IF EXISTS update_channel_name_normalized;", [])
+        .context("Failed to drop existing update trigger")?;
+
+    conn.execute("DROP TRIGGER IF EXISTS normalize_channel_name_insert;", [])
+        .context("Failed to drop existing update trigger")?;
+
+    conn.execute("DROP TRIGGER IF EXISTS normalize_channel_name_update;", [])
+        .context("Failed to drop existing update trigger")?;
+
+    // Set DB version
+    insert_version(
+        10,
+        "Normalize existing channel names, drop triggers for that.",
+        conn,
+    )?;
+    Ok(())
+}
+
+fn normalize_channel_name(channel_name: &str) -> String {
+    let re = Regex::new(r#"['\"]"#).unwrap(); // This works for removing quotes
+
+    let mut normalized = re.replace_all(channel_name, "");
+
+    // Replace spaces with hyphens
+    normalized = normalized.replace(" ", "-").into();
+
+    // Convert to lowercase
+    normalized.to_lowercase()
 }
