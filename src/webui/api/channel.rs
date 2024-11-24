@@ -33,7 +33,7 @@ pub async fn post_channel(data: Form<PostFormChannel>, db_pool: &State<DBPool>) 
     )
     .expect("Could not write to db.");
 
-    Redirect::to("/channels")
+    Redirect::to("/")
 }
 
 #[derive(FromForm, Deserialize, Serialize)]
