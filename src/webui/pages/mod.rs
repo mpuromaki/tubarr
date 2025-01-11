@@ -4,6 +4,9 @@ pub use home::*;
 mod channels;
 pub use channels::*;
 
+mod conf;
+pub use conf::*;
+
 fn render_page(head: &str, body: &str) -> String {
     let mut page = String::with_capacity(1024);
     page.push_str(TMPL_1);
@@ -41,6 +44,7 @@ const TMPL_2: &'static str = r###"
             <nav>
                 <ul>
                     <li><a href="/">Home</a></li>
+                    <li><a href="/configuration">Configuration</a></li>
                 </ul>
             </nav>
         </aside>
